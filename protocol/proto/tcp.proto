@@ -1,0 +1,10 @@
+syntax = "proto3";
+package pb;
+
+// 协议头
+message MsgHead {
+    int32 MsgID = 1; //协议号
+    bytes MsgBody = 2; //协议体
+    uint32 PacketNo = 3; //消息流水号
+    string MsgName = 4; //协议名字
+}
