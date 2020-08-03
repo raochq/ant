@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"path/filepath"
 )
 
 type LogLevel int8
@@ -19,113 +20,163 @@ const (
 	LogLevel_Debug
 )
 
+type PrefixStyle int8
+
+const (
+	PrefixStyle_None PrefixStyle = iota
+	PrefixStyle_Normal
+	PrefixStyle_Color
+)
+
 var (
-	gLogger *logger
+	gLogger      = New(LogLevel_Info, os.Stdout, PrefixStyle_Normal, log.LstdFlags|log.Lshortfile)
+	colorPrefixs = []string{
+		"",
+		"\033[0;33mFATAL:\033[0m ",
+		"\033[0;31mERROR:\033[0m ",
+		"\033[0;35mWARN:\033[0m ",
+		"\033[0;32mINFO:\033[0m ",
+		"\033[0;36mDEBUG:\033[0m ",
+	}
+	normalPrefixs = []string{
+		"",
+		"FATAL: ",
+		"ERROR: ",
+		"WARN: ",
+		"INFO: ",
+		"DEBUG: ",
+	}
 )
 
 type logger struct {
 	level                         LogLevel
-	writer                        io.Writer
+	out                           io.Writer
 	debug, info, warn, err, fatal *log.Logger
 }
 
-func New(level LogLevel, writer io.Writer) *logger {
-	var out, errOut io.Writer
-	if writer != nil {
-		out = writer
-		out = writer
-	} else {
-		out = os.Stdout
-		errOut = os.Stderr
+func New(level LogLevel, out io.Writer, style PrefixStyle, flag int) *logger {
+	var prefix []string
+	switch style {
+	case PrefixStyle_Normal:
+		prefix = normalPrefixs
+	case PrefixStyle_Color:
+		prefix = colorPrefixs
+	default:
+		prefix = make([]string, 6)
 	}
+
 	l := &logger{
-		level:  level,
-		writer: writer,
-		debug:  log.New(out, "\033[0;36mDEBUG:\033[0m ", log.LstdFlags|log.Lshortfile),
-		info:   log.New(out, "\033[0;32mINFO:\033[0m ", log.LstdFlags|log.Lshortfile),
-		warn:   log.New(errOut, "\033[0;35mWARN:\033[0m ", log.LstdFlags|log.Lshortfile),
-		err:    log.New(errOut, "\033[0;31mERROR:\033[0m ", log.LstdFlags|log.Lshortfile),
-		fatal:  log.New(errOut, "\033[0;33mFATAL:\033[0m ", log.LstdFlags|log.Lshortfile),
+		level: level,
+		out:   out,
+		debug: log.New(out, prefix[LogLevel_Debug], flag),
+		info:  log.New(out, prefix[LogLevel_Info], flag),
+		warn:  log.New(out, prefix[LogLevel_Warn], flag),
+		err:   log.New(out, prefix[LogLevel_Error], flag),
+		fatal: log.New(out, prefix[LogLevel_Fatal], flag),
 	}
 	return l
 }
-func (l *logger) setOutPut(w io.Writer) {
-	var out, errOut io.Writer
-	if w != nil {
-		out = w
-		errOut = w
-	} else {
-		out = os.Stdout
-		errOut = os.Stderr
+func (l *logger) SetLogLevel(level string) {
+	lv := LogLevel_Info
+	switch level {
+	case "debug":
+		lv = LogLevel_Debug
+	case "info":
+		lv = LogLevel_Info
+	case "warn":
+		lv = LogLevel_Warn
+	case "error":
+		lv = LogLevel_Error
+	case "fatal":
+		lv = LogLevel_Fatal
+	default:
+		lv = LogLevel_Info
 	}
+	l.level = lv
+}
+
+func SetLogLevel(level string) {
+	gLogger.SetLogLevel(level)
+}
+
+func (l *logger) SetPrefixStyle(style PrefixStyle) {
+	var prefix []string
+	switch style {
+	case PrefixStyle_Normal:
+		prefix = normalPrefixs
+	case PrefixStyle_Color:
+		prefix = colorPrefixs
+	default:
+		prefix = make([]string, 6)
+	}
+	l.debug.SetPrefix(prefix[LogLevel_Debug])
+	l.info.SetPrefix(prefix[LogLevel_Info])
+	l.warn.SetPrefix(prefix[LogLevel_Warn])
+	l.err.SetPrefix(prefix[LogLevel_Error])
+	l.fatal.SetPrefix(prefix[LogLevel_Fatal])
+}
+func SetPrefixStyle(style PrefixStyle) {
+	gLogger.SetPrefixStyle(style)
+}
+
+func (l *logger) SetOutPut(out io.Writer) {
+	l.out = out
 	l.debug.SetOutput(out)
 	l.info.SetOutput(out)
-	l.warn.SetOutput(errOut)
-	l.err.SetOutput(errOut)
-	l.fatal.SetOutput(errOut)
-	l.writer = w
+	l.warn.SetOutput(out)
+	l.err.SetOutput(out)
+	l.fatal.SetOutput(out)
 }
-
-func SetLogLevel(level LogLevel) {
-	Logger().level = level
+func SetOutput(out io.Writer) {
+	gLogger.SetOutPut(out)
 }
-
-func SetOutput(filename string) {
-	l := Logger()
+func SetOutputFile(filename string) {
+	if !filepath.IsAbs(filename) {
+		filename, _ = filepath.Abs(filepath.Dir(os.Args[0]) + "/" + filename)
+	}
+	l := gLogger
 	if filename == "" {
-		l.setOutPut(nil)
-		if l.writer != nil {
-			if val, ok := l.writer.(*lumberjack.Logger); ok {
-				val.Close()
-			}
+		if val, ok := l.out.(*lumberjack.Logger); ok {
+			val.Close()
 		}
+		l.SetOutPut(os.Stdout)
 	} else {
-		if l.writer == nil {
-			l.setOutPut(&lumberjack.Logger{
-				Filename:   filename,
-				MaxSize:    500, // megabytes
-				MaxBackups: 10,
-				MaxAge:     28,   //days
-				Compress:   true, // disabled by default
-			})
+		if val, ok := l.out.(*lumberjack.Logger); ok {
+			val.Filename = filename
 		} else {
-			if val, ok := l.writer.(*lumberjack.Logger); ok {
-				val.Filename = filename
+			out := &lumberjack.Logger{
+				Filename:   filename,
+				MaxSize:    10, // megabytes
+				MaxBackups: 10,
+				MaxAge:     28, //days
 			}
+			l.SetOutPut(out)
 		}
 	}
-}
-
-func Logger() *logger {
-	if gLogger == nil {
-		l := New(LogLevel_Info, nil)
-		gLogger = l
-	}
-	return gLogger
 }
 
 // Debug log debug protocol with cyan color.
 func Debug(format string, v ...interface{}) {
-	Logger().debug.Output(2, fmt.Sprintf(format, v...))
+	gLogger.debug.Output(2, fmt.Sprintf(format, v...))
 }
 
 // Info log normal protocol.
 func Info(format string, v ...interface{}) {
-	Logger().info.Output(2, fmt.Sprintf(format, v...))
+	gLogger.info.Output(2, fmt.Sprintf(format, v...))
 }
 
 // Warn log error protocol
 func Warn(format string, v ...interface{}) {
-	Logger().warn.Output(2, fmt.Sprintf(format, v...))
+	gLogger.warn.Output(2, fmt.Sprintf(format, v...))
 }
 
 // Error log error protocol with red color.
 func Error(format string, v ...interface{}) {
-	Logger().err.Output(2, fmt.Sprintf(format, v...))
+	gLogger.err.Output(2, fmt.Sprintf(format, v...))
 }
 
 // Fatal log error protocol
 func Fatal(format string, v ...interface{}) {
-	Logger().fatal.Output(2, fmt.Sprintf(format, v...))
+	gLogger.fatal.Output(2, fmt.Sprintf(format, v...))
 	os.Exit(1)
 }

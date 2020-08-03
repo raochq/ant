@@ -5,7 +5,18 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"strings"
 )
+
+// 获取程序名称
+func GetAppName() string {
+	path := filepath.Dir(os.Args[0])
+	appname := strings.Trim(os.Args[0], path)
+	appname = strings.Trim(appname, filepath.Ext(appname))
+
+	return appname
+
+}
 
 // 获取程序路径
 func GetAppPath() string {

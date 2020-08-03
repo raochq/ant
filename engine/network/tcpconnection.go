@@ -20,7 +20,6 @@ type TCPHandler interface {
 	Receive(TCPConnect, []byte)
 }
 
-
 type TCPConnection struct {
 	*net.TCPConn
 

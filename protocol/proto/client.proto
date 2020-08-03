@@ -1,2 +1,23 @@
 syntax = "proto3";
 package pb;
+import "gogoproto/gogo.proto";
+
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.sizer_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+//option (gogoproto.goproto_getters_all) = false;
+//option (gogoproto.goproto_enum_prefix_all) = false;
+//option go_package = ".;pb";
+
+// Ping
+message MsgPing {
+    // 时间戳
+    int64 Time = 1;
+}
+// pong
+message MsgPong {
+    // 时间戳
+    int64 Time = 1;
+    // 来源间戳
+    int64 Origin = 2;
+}

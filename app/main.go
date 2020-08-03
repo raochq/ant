@@ -6,89 +6,72 @@ import (
 	"fmt"
 	"github.com/google/gops/agent"
 	"github.com/raochq/ant/engine/logger"
-	"github.com/raochq/ant/game"
-	"github.com/raochq/ant/gate"
+	_ "github.com/raochq/ant/game"
+	_ "github.com/raochq/ant/gate"
 	"github.com/raochq/ant/service"
 	"io/ioutil"
-	"log"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
 var (
-	zoneID       uint
-	serverID     uint
-	etcd         []string
-	ServiceName  string
-	conf         string
-	buildVersion = BuildVersion{"2020-03-19", "1.0.1", ""}
+	conf         service.Config
+	AppName      = "ant" // 应用名称
+	AppVersion   string  // 应用版本
+	BuildVersion string  // 编译版本
+	BuildTime    string  // 编译时间
+	GitRevision  string  // Git版本
+	GitBranch    string  // Git分支
+	GoVersion    string  // Golang信息
 )
 
-type BuildVersion struct {
-	BuildData string
-	BuildVer  string
-	GitTag    string
-}
-
 func init() {
-	var etcdstr string
-	h := flag.Bool("h", false, "help    :显示帮助")
-	v := flag.Bool("v", false, "version :查看版本信息")
-	flag.StringVar(&ServiceName, "s", "", "service :需要启动的服务模块名称")
-	flag.StringVar(&conf, "c", "", "conf :配置文件位置")
-	flag.StringVar(&etcdstr, "e", "127.0.0.1:2379", "etcd :etcd地址: etcd1,etcd2,etcd3...")
-	flag.UintVar(&zoneID, "zid", 1, "zoneID :区服id")
-	flag.UintVar(&zoneID, "sid", 1, "zoneID :服务器id")
+	var confFile string
+	bVersion := false
+	flag.StringVar(&confFile, "conf", "", "Location of config, default: $AppName.json")
+	flag.BoolVar(&bVersion, "v", false, "Version information")
 	flag.Usage = usage
 	flag.Parse()
-	if *v {
-		fmt.Printf("%v\n", buildVersion)
+	if bVersion {
+		fmt.Print(Version())
 		os.Exit(0)
 	}
-
-	if *h || ServiceName == "" {
+	if len(os.Args) > 1 && confFile == "" {
 		flag.Usage()
 		os.Exit(0)
 	}
-	etcd = strings.Split(etcdstr, ",")
 
-	loadConfig()
-}
-
-func loadConfig() {
-	if conf == "" {
-		return
+	if confFile == "" {
+		confFile = strings.TrimSuffix(filepath.Base(os.Args[0]), filepath.Ext(os.Args[0])) + ".json"
 	}
-	b, err := ioutil.ReadFile(conf)
+	fmt.Printf("conf=%s\n", confFile)
+	b, err := ioutil.ReadFile(confFile)
 	if err != nil {
-		logger.Fatal("load config %v failed %v", conf, err)
+		logger.Fatal("load config %v failed %v", confFile, err)
 	}
 
-	cfg := struct {
-		Etcd    []string
-		LogFile string
-	}{}
-	err = json.Unmarshal(b, &cfg)
+	err = json.Unmarshal(b, &conf)
 	if err != nil {
-		logger.Fatal("unmarshal config %v failed %v", conf, err)
+		logger.Fatal("unmarshal config %v failed %v", confFile, err)
 	}
-	logger.SetOutput(cfg.LogFile)
-	etcd = cfg.Etcd
+
+	logger.SetOutputFile(conf.LogPath)
+	logger.SetLogLevel(conf.LogLevel)
 }
 
 func main() {
-	monitor()
-
-	var svr service.IService
-	switch ServiceName {
-	case "game":
-		svr = game.New(uint16(zoneID), uint16(serverID))
-	case "gate":
-		svr = gate.New(uint16(zoneID), uint16(serverID))
-	default:
-		log.Fatal("unknown service name ", ServiceName)
+	Version()
+	if err := service.CreateService(conf); err != nil {
+		logger.Fatal("register service failed %v", err)
 	}
-	service.Register(svr, etcd)
+
+	//使用gops性能监控
+	if err := agent.Listen(agent.Options{}); err != nil {
+		logger.Fatal("gops listen fail %v", err)
+	}
+	defer agent.Close()
+
 	service.Run()
 }
 
@@ -97,17 +80,11 @@ func usage() {
   ant <cmd> [options]
 options:
 `
-	fmt.Fprintf(os.Stderr, "ant version: %s\n%s", buildVersion.BuildVer, helpText)
+	fmt.Fprintf(os.Stderr, "%s\n%s", Version(), helpText)
 	flag.PrintDefaults()
 }
 
-//使用gops性能监控
-func monitor() {
-	if err := agent.Listen(agent.Options{
-		Addr:            "",
-		ConfigDir:       "",
-		ShutdownCleanup: true,
-	}); err != nil {
-		logger.Fatal("gops listen fail %v", err)
-	}
+// Version 版本信息
+func Version() string {
+	return fmt.Sprintf("%s Version:\t%s\nBuild version:\t%s\nBuild time:\t%s\nGit revision:\t%s\nGit branch:\t%s\nGolang Version: %s\n", AppName, AppVersion, BuildVersion, BuildTime, GitRevision, GitBranch, GoVersion)
 }
