@@ -43,7 +43,7 @@ func init() {
 	}
 
 	if confFile == "" {
-		confFile = strings.TrimSuffix(filepath.Base(os.Args[0]), filepath.Ext(os.Args[0])) + ".json"
+		confFile = strings.TrimSuffix(os.Args[0], filepath.Ext(os.Args[0])) + ".json"
 	}
 	fmt.Printf("conf=%s\n", confFile)
 	b, err := ioutil.ReadFile(confFile)
@@ -61,7 +61,7 @@ func init() {
 }
 
 func main() {
-	Version()
+	logger.Info(Version())
 	if err := service.CreateService(conf); err != nil {
 		logger.Fatal("register service failed %v", err)
 	}

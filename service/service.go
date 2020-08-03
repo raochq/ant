@@ -34,7 +34,7 @@ type Service struct {
 	IService
 	pb.ServiceInfo
 
-	id     string
+	name   string
 	chStop chan ServerNotify
 	state  State
 
@@ -43,8 +43,8 @@ type Service struct {
 	leaseSig <-chan *clientv3.LeaseKeepAliveResponse
 }
 
-// 从etcd查找服务
-func getService(Id string, address []string) (*pb.ServiceInfo, error) {
+// 从etcd查找服务二配置
+func getServiceConf(Id string, address []string) (*pb.ServiceInfo, error) {
 	cli, err := clientv3.New(clientv3.Config{
 		Endpoints:   address,
 		DialTimeout: time.Second,
@@ -74,7 +74,7 @@ func getService(Id string, address []string) (*pb.ServiceInfo, error) {
 
 // 创建服务
 func CreateService(conf Config) error {
-	info, err := getService(conf.Id, conf.Etcd)
+	info, err := getServiceConf(conf.Id, conf.Etcd)
 	if err != nil {
 		return fmt.Errorf("GetService error %w", err)
 	}
@@ -85,23 +85,20 @@ func CreateService(conf Config) error {
 	fn := obj.(CreateServiceFunc)
 
 	svr := &Service{
-		IService:    fn(*info),
+		IService:    fn(conf.Id, *info),
 		ServiceInfo: *info,
-		id:          conf.Id,
+		name:        conf.Id,
 		chStop:      make(chan ServerNotify),
 	}
-	if _, ok = gServiceList.LoadOrStore(svr.Key(), svr); ok {
-		return fmt.Errorf("service %s is already registered", svr.Key())
+	if _, ok = gServiceList.LoadOrStore(svr.name, svr); ok {
+		return fmt.Errorf("service %s is already registered", svr.name)
 	}
 	err = svr.registerToETCD(conf.Etcd)
 	if err != nil {
-		gServiceList.Delete(svr.Key())
+		gServiceList.Delete(svr.name)
 		return err
 	}
-	logger.Info("===Create service %v ===", svr.Key())
-	go WatchETCD(svr.Key(), EKey_Service+svr.Key(), func(evt *clientv3.Event) {
-		fmt.Println("watchETCD:", evt)
-	})
+	logger.Info("===Create service %v ===", svr.name)
 	return nil
 }
 
@@ -109,7 +106,7 @@ func CreateService(conf Config) error {
 func Run() {
 	var wg sync.WaitGroup
 	//启动服务
-	gServiceList.Range(func(key, value interface{}) bool {
+	gServiceList.Range(func(_, value interface{}) bool {
 		s := value.(*Service)
 		wg.Add(1)
 		go s.run(&wg)
@@ -117,7 +114,7 @@ func Run() {
 	})
 	WaitForStop()
 	// 退出服务
-	gServiceList.Range(func(key, value interface{}) bool {
+	gServiceList.Range(func(_, value interface{}) bool {
 		s := value.(*Service)
 		s.close()
 		return true
@@ -132,13 +129,20 @@ func WaitForStop() {
 	logger.Debug("捕获%v（%v）信号， 退出服务", sig, int(sig.(syscall.Signal)))
 }
 
-// 监控ETCDKey
-func WatchETCD(serviceName string, key string, f func(evt *clientv3.Event)) error {
-	if value, ok := gServiceList.Load(serviceName); ok {
-		s := value.(*Service)
-		return s.watchETCD(key, f)
+// 获取服务实例
+func GetService(name string) (*Service, error) {
+	if value, ok := gServiceList.Load(name); ok {
+		return value.(*Service), nil
 	}
-	return fmt.Errorf("service %s not found", serviceName)
+	return nil, fmt.Errorf("service %s not found", name)
+}
+
+//计算服务唯一Key
+func GetKey(info *pb.ServiceInfo) string {
+	if info == nil {
+		return ""
+	}
+	return fmt.Sprintf("%s/%d/%s/%d", EKey_Zone, info.Zone, info.Kind, info.ID)
 }
 
 // 向ETCD请求注册
@@ -172,19 +176,26 @@ func (s *Service) registerToETCD(address []string) error {
 }
 
 //监控Key
-func (s *Service) watchETCD(key string, f func(evt *clientv3.Event)) error {
+func (s *Service) WatchETCD(ctx context.Context, key string, f func(evt *clientv3.Event)) error {
 	if s.client == nil {
 		return errors.New("etcd client is nil")
 	}
-	rch := s.client.Watch(context.Background(), key, clientv3.WithPrefix())
-	for wresp := range rch {
-		for _, ev := range wresp.Events {
-			logger.Info("%s,find etcd event [%s] %q : %q\n", s.Key(), ev.Type, ev.Kv.Key, ev.Kv.Value)
-			if f != nil {
-				f(ev)
+	rch := s.client.Watch(ctx, key, clientv3.WithPrefix())
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case wresp := <-rch:
+				for _, ev := range wresp.Events {
+					logger.Info("%s,find etcd event [%s] %q : %q\n", s.name, ev.Type, ev.Kv.Key, ev.Kv.Value)
+					if f != nil {
+						f(ev)
+					}
+				}
 			}
 		}
-	}
+	}()
 
 	return nil
 }
@@ -195,25 +206,49 @@ func (s *Service) synState() (err error) {
 	}
 	switch s.state {
 	case Init:
-		s.client.Put(context.TODO(), EKey_Service+s.Key()+EKey_State, s.state.String(), clientv3.WithLease(s.leaseId))
+		_, err = s.client.Put(context.TODO(), EKey_Service+s.Key()+EKey_State, s.state.String(), clientv3.WithLease(s.leaseId))
+		if err != nil {
+			logger.Error("%s synState error: %v", s.Key(), err)
+			return
+		}
 	case Running:
 		_, err = s.client.Put(context.TODO(), EKey_Service+s.Key()+EKey_Addr, fmt.Sprintf("%s:%d", s.IP, s.Port), clientv3.WithLease(s.leaseId))
-		s.client.Put(context.TODO(), EKey_Service+s.Key()+EKey_State, s.state.String(), clientv3.WithLease(s.leaseId))
+		if err != nil {
+			logger.Error("%s synState error: %v", s.Key(), err)
+			return
+		}
+		_, err = s.client.Put(context.TODO(), EKey_Service+s.Key()+EKey_State, s.state.String(), clientv3.WithLease(s.leaseId))
+		if err != nil {
+			logger.Error("%s synState error: %v", s.Key(), err)
+			return
+		}
 	case Stopping:
-		s.client.Put(context.TODO(), EKey_Service+s.Key()+EKey_State, s.state.String(), clientv3.WithLease(s.leaseId))
-		s.client.Delete(context.TODO(), EKey_Service+s.Key()+EKey_Addr)
+		_, err = s.client.Put(context.TODO(), EKey_Service+s.Key()+EKey_State, s.state.String(), clientv3.WithLease(s.leaseId))
+		if err != nil {
+			logger.Error("%s synState error: %v", s.Key(), err)
+			return
+		}
+		_, err = s.client.Delete(context.TODO(), EKey_Service+s.Key()+EKey_Addr)
+		if err != nil {
+			logger.Error("%s synState error: %v", s.Key(), err)
+			return
+		}
 	case Stopped:
-		s.client.Delete(context.TODO(), EKey_Service+s.Key()+EKey_State)
+		_, err = s.client.Delete(context.TODO(), EKey_Service+s.Key()+EKey_State)
+		if err != nil {
+			logger.Error("%s synState error: %v", s.Key(), err)
+			return
+		}
 	}
-
+	logger.Info("%s synState: %v", s.Key(), s.state)
 	return err
 }
 func (s *Service) run(w *sync.WaitGroup) {
 	defer w.Done()
-	logger.Info("===init service %v ===", s.Key())
+	logger.Info("===init service %v ===", s.name)
 	s.Init()
 	s.state = Running
-	logger.Info("===running service %v ===", s.Key())
+	logger.Info("===running service %v ===", s.name)
 	s.synState()
 	s.loop()
 	s.Destroy()
@@ -221,7 +256,7 @@ func (s *Service) run(w *sync.WaitGroup) {
 	s.synState()
 	s.client.Revoke(context.TODO(), s.leaseId)
 	s.leaseId = 0
-	logger.Info("===stopped service %v ===", s.Key())
+	logger.Info("===stopped service %v ===", s.name)
 
 }
 func (s *Service) loop() {
@@ -255,9 +290,9 @@ func (s *Service) close() {
 func (s *Service) stop() {
 	s.state = Stopping
 	s.synState()
-	logger.Info("===stopping service %v_%v ===", s.Key(), s.ID)
+	logger.Info("===stopping service %v ===", s.name)
 	s.Stop()
 }
 func (s *Service) Key() string {
-	return fmt.Sprintf("/zone/%d/%s/%d", s.Zone, s.Kind, s.ID)
+	return GetKey(&s.ServiceInfo)
 }

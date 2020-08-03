@@ -1,31 +1,31 @@
 package game
 
 import (
+	"context"
 	"fmt"
 	"github.com/raochq/ant/protocol/pb"
 	"github.com/raochq/ant/service"
+	"go.etcd.io/etcd/clientv3"
 )
 
 type Game struct {
-	zoneId int32
-	id     int32
-	state  service.State
+	pb.ServiceInfo
+	name string
+
+	state service.State
 }
 
-func (g *Game) Name() string {
-	return fmt.Sprintf("/Game/%d/%d", g.zoneId, g.id)
-}
-func (g *Game) ZoneID() int32 {
-	return g.zoneId
-}
-func (g *Game) ID() string {
-	return fmt.Sprintf("%2d%2d", g.ZoneID(), g.id)
-}
 func (g *Game) State() service.State {
 	return g.state
 }
-
 func (g *Game) Init() error {
+	svr, err := service.GetService(g.name)
+	if err != nil {
+		return err
+	}
+	svr.WatchETCD(context.TODO(), fmt.Sprintf("%s%s/%d", service.EKey_Service, service.EKey_Zone, svr.Zone), func(evt *clientv3.Event) {
+		fmt.Println("watchETCD:", evt)
+	})
 	return nil
 }
 
@@ -36,15 +36,15 @@ func (g *Game) Stop() {
 
 }
 
-func New(zoneID, serverId int32) *Game {
+func New(name string, info pb.ServiceInfo) *Game {
 	return &Game{
-		zoneId: zoneID,
-		id:     serverId,
+		name:        name,
+		ServiceInfo: info,
 	}
 }
 
 func init() {
-	service.Register(pb.ServiceInfo_Game, func(info pb.ServiceInfo) service.IService {
-		return New(info.Zone, info.ID)
+	service.Register(pb.ServiceInfo_Game, func(name string, info pb.ServiceInfo) service.IService {
+		return New(name, info)
 	})
 }

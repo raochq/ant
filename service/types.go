@@ -9,6 +9,7 @@ import (
 const (
 	EKey_Config  = "/Config"  // 服务配置
 	EKey_Service = "/Service" // 服务列表
+	EKey_Zone    = "/Zone"    // 区服列表
 	EKey_State   = "/State"   // 服务状态
 	EKey_Addr    = "/Addr"    // 服务端口地址
 )
@@ -53,7 +54,7 @@ type IService interface {
 	Destroy()    // 销毁服务
 }
 
-type CreateServiceFunc func(info pb.ServiceInfo) IService
+type CreateServiceFunc func(string, pb.ServiceInfo) IService
 
 type Config struct {
 	Id       string

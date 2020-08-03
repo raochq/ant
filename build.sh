@@ -55,7 +55,7 @@ function build() {
 
   BUILD_VERSION=$(git log -1 --oneline)
   BUILD_TIME=$(date +%FT%T%z)
-  GIT_REVISION=$(git rev-parse --short HEAD)
+  GIT_REVISION=$(git rev-parse HEAD)
   GIT_BRANCH=$(git name-rev --name-only HEAD)
 
   echo "build version ${APP_VERSION}"
