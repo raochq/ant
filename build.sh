@@ -10,27 +10,13 @@ fi
 
 function proto() {
   echo "proto"
-  GOOS=$(go env GOOS)
-  spec=":"
-  if [ "$GOOS" = "windows" ]; then
-    spec=";"
-  fi
 
   PROTO_SRC=./protocol/proto
   PROTO_DEST=./protocol/pb
-  GOPATH=$(go env GOPATH)
-
-  GOGO_VERSION=@v1.3.1
-  GOGO_ROOT=${GOPATH}/pkg/mod/github.com/gogo/protobuf${GOGO_VERSION}
-  GOGO_PATH=${GOGO_ROOT}${spec}${GOGO_ROOT}/protobuf
-  # GENGO=go_out
-  # GENGO=gofast_out
-  # GENGO=gofast_out=plugins=grpc:
-  # GENGO=gogo_out
-  GENGO=gofast_out
+  GENGO=go_out
   echo "gen proto ..."
   test -d ${PROTO_DEST} || mkdir -p ${PROTO_DEST}
-  protoc -I=${GOGO_PATH}${spec}${PROTO_SRC} --${GENGO}=${PROTO_DEST} ${PROTO_SRC}/*.proto
+  protoc -I=${PROTO_SRC} --${GENGO}=${PROTO_DEST} ${PROTO_SRC}/*.proto
   echo "gen proto ok"
 }
 
@@ -42,7 +28,7 @@ function build() {
 
   major="1"
   minor="0"
-  release=17
+  release=20
 
   APP_VERSION="${major}.${minor}.$release"
   sed -i "s/release=${release}/release=$((${release} + 1))/g" $0

@@ -1,3 +1,6 @@
-/protocol/pb/
 /.idea/
+/.vscode/
+/protocol/pb/
 /log/
+/bin/
+/go.sum
