@@ -1,4 +1,4 @@
-#!/usr/bin/bash
+#!/bin/bash
 
 set -e
 if [ -z "$1" ]; then
@@ -8,7 +8,7 @@ else
   arg="$1"
 fi
 
-function proto() {
+proto() {
   echo "proto"
 
   PROTO_SRC=./protocol/proto
@@ -16,22 +16,24 @@ function proto() {
   GENGO=go_out
   echo "gen proto ..."
   test -d ${PROTO_DEST} || mkdir -p ${PROTO_DEST}
-  protoc -I=${PROTO_SRC} --${GENGO}=${PROTO_DEST} ${PROTO_SRC}/*.proto
+  protoc -I=${PROTO_SRC} --${GENGO}=plugins=grpc:${PROTO_DEST} ${PROTO_SRC}/*.proto
   echo "gen proto ok"
 }
 
-function build() {
+build() {
   OUTPUT_DIR=$(pwd)/bin
   GOOS=$(go env GOOS)
   GOEXE=$(go env GOEXE)
   GO_VERSION=$(go version)
-
+  if [ "$GOOS" = "Darwin" ]; then
+    sedbak=""
+  fi
   major="1"
   minor="0"
-  release=20
+  release=27
 
   APP_VERSION="${major}.${minor}.$release"
-  sed -i "s/release=${release}/release=$((${release} + 1))/g" $0
+  sed -i ${sedbak} "s/release=${release}/release=$((${release} + 1))/g" $0
 
   # test -f version.txt && APP_VERSION=$(cat version.txt)
   # array=(${APP_VERSION//./ })

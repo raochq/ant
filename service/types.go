@@ -50,15 +50,14 @@ const (
 
 type IService interface {
 	Init() error // 初始化
-	Stop()       // 停止服务
 	Destroy()    // 销毁服务
 }
 
 type CreateServiceFunc func(string, pb.ServiceInfo) IService
 
 type Config struct {
-	Id       string
-	Etcd     []string
-	LogPath  string
-	LogLevel string
+	ServiceIDs []string
+	Etcd       []string
+	LogPath    string
+	LogLevel   string
 }

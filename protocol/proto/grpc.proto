@@ -1,0 +1,20 @@
+syntax = "proto3";
+package pb;
+option go_package = ".;pb";
+message RPCString
+{
+  string msg = 1;
+}
+
+// 登录服
+service LoginService{
+  rpc Echo(RPCString) returns (RPCString){}
+}
+// 网关服
+service GateService{
+  rpc Echo(RPCString) returns (RPCString){}
+}
+// 逻辑服
+service GameService{
+  rpc Echo(RPCString) returns (RPCString){}
+}

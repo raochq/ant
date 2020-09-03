@@ -10,17 +10,19 @@ import (
 
 type Game struct {
 	pb.ServiceInfo
+	RPCServer
+
 	name string
-
-	state service.State
 }
 
-func (g *Game) State() service.State {
-	return g.state
-}
+var _ service.IService = (*Game)(nil)
+
 func (g *Game) Init() error {
 	svr, err := service.GetService(g.name)
 	if err != nil {
+		return err
+	}
+	if err = g.startGrpc(g.Port); err != nil {
 		return err
 	}
 	svr.WatchETCD(context.TODO(), fmt.Sprintf("%s%s/%d", service.EKey_Service, service.EKey_Zone, svr.Zone), func(evt *clientv3.Event) {
@@ -28,19 +30,16 @@ func (g *Game) Init() error {
 	})
 	return nil
 }
-
 func (g *Game) Destroy() {
-
+	g.stopGrpc()
 }
-func (g *Game) Stop() {
-
-}
-
 func New(name string, info pb.ServiceInfo) *Game {
-	return &Game{
+	g := &Game{
 		name:        name,
 		ServiceInfo: info,
 	}
+	g.RPCServer.owner = g
+	return g
 }
 
 func init() {

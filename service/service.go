@@ -18,7 +18,7 @@ import (
 )
 
 var (
-	gServiceFactory sync.Map // map[pb.ServiceInfo_SKind]reflect.Type{}
+	gServiceFactory sync.Map // map[pb.ServiceInfo_SKind]CreateServiceFunc
 	gServiceList    sync.Map // map[string]*Service{}
 )
 
@@ -74,31 +74,37 @@ func getServiceConf(Id string, address []string) (*pb.ServiceInfo, error) {
 
 // 创建服务
 func CreateService(conf Config) error {
-	info, err := getServiceConf(conf.Id, conf.Etcd)
-	if err != nil {
-		return fmt.Errorf("GetService error %w", err)
+	if len(conf.ServiceIDs) == 0 {
+		return errors.New("no service to create")
 	}
-	obj, ok := gServiceFactory.Load(info.Kind)
-	if !ok {
-		return fmt.Errorf("unknown service %v", info.Kind)
-	}
-	fn := obj.(CreateServiceFunc)
+	for _, svrId := range conf.ServiceIDs {
+		info, err := getServiceConf(svrId, conf.Etcd)
+		if err != nil {
+			return fmt.Errorf("GetService error %w", err)
 
-	svr := &Service{
-		IService:    fn(conf.Id, *info),
-		ServiceInfo: *info,
-		name:        conf.Id,
-		chStop:      make(chan ServerNotify),
+		}
+		obj, ok := gServiceFactory.Load(info.Kind)
+		if !ok {
+			return fmt.Errorf("unknown service %v", info.Kind)
+		}
+		fn := obj.(CreateServiceFunc)
+
+		svr := &Service{
+			IService:    fn(svrId, *info),
+			ServiceInfo: *info,
+			name:        svrId,
+			chStop:      make(chan ServerNotify, 1),
+		}
+		if _, ok = gServiceList.LoadOrStore(svr.name, svr); ok {
+			return fmt.Errorf("service %s is already registered", svr.name)
+		}
+		err = svr.registerToETCD(conf.Etcd)
+		if err != nil {
+			gServiceList.Delete(svr.name)
+			return err
+		}
+		logger.Info("===Create service %v ===", svr.name)
 	}
-	if _, ok = gServiceList.LoadOrStore(svr.name, svr); ok {
-		return fmt.Errorf("service %s is already registered", svr.name)
-	}
-	err = svr.registerToETCD(conf.Etcd)
-	if err != nil {
-		gServiceList.Delete(svr.name)
-		return err
-	}
-	logger.Info("===Create service %v ===", svr.name)
 	return nil
 }
 
@@ -112,13 +118,15 @@ func Run() {
 		go s.run(&wg)
 		return true
 	})
-	WaitForStop()
-	// 退出服务
-	gServiceList.Range(func(_, value interface{}) bool {
-		s := value.(*Service)
-		s.close()
-		return true
-	})
+	go func() {
+		WaitForStop()
+		// 退出服务
+		gServiceList.Range(func(_, value interface{}) bool {
+			s := value.(*Service)
+			s.close()
+			return true
+		})
+	}()
 	wg.Wait()
 }
 func WaitForStop() {
@@ -246,11 +254,18 @@ func (s *Service) synState() (err error) {
 func (s *Service) run(w *sync.WaitGroup) {
 	defer w.Done()
 	logger.Info("===init service %v ===", s.name)
-	s.Init()
+	err := s.Init()
+	if err != nil {
+		logger.Error("init service failed: %v", err)
+		return
+	}
 	s.state = Running
 	logger.Info("===running service %v ===", s.name)
 	s.synState()
 	s.loop()
+	s.state = Stopping
+	s.synState()
+	logger.Info("===stopping service %v ===", s.name)
 	s.Destroy()
 	s.state = Stopped
 	s.synState()
@@ -261,8 +276,6 @@ func (s *Service) run(w *sync.WaitGroup) {
 }
 func (s *Service) loop() {
 	defer utils.PrintPanicStack()
-	defer s.stop()
-
 	for {
 		select {
 		case c, ok := <-s.chStop:
@@ -284,14 +297,15 @@ func (s *Service) loop() {
 
 }
 
+//关闭服务器，非阻塞
 func (s *Service) close() {
-	s.chStop <- notifyStop
+	select {
+	case s.chStop <- notifyStop:
+	default:
+	}
 }
 func (s *Service) stop() {
-	s.state = Stopping
-	s.synState()
-	logger.Info("===stopping service %v ===", s.name)
-	s.Stop()
+
 }
 func (s *Service) Key() string {
 	return GetKey(&s.ServiceInfo)
