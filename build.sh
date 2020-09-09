@@ -25,15 +25,16 @@ build() {
   GOOS=$(go env GOOS)
   GOEXE=$(go env GOEXE)
   GO_VERSION=$(go version)
-  if [ "$GOOS" = "Darwin" ]; then
-    sedbak=""
-  fi
   major="1"
   minor="0"
   release=27
 
   APP_VERSION="${major}.${minor}.$release"
-  sed -i ${sedbak} "s/release=${release}/release=$((${release} + 1))/g" $0
+    if [ "$GOOS" = "darwin" ]; then
+      sed -i "" "s/release=${release}/release=$((${release} + 1))/g" $0
+    else
+      sed -i "s/release=${release}/release=$((${release} + 1))/g" $0
+    fi
 
   # test -f version.txt && APP_VERSION=$(cat version.txt)
   # array=(${APP_VERSION//./ })
