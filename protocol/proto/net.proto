@@ -1,35 +1,74 @@
 syntax = "proto3";
 package pb;
 
-option go_package = ".;pb";
+option go_package = "/pb";
 
 // 协议头
 message MsgHead
 {
-    //协议号
-    int32 MsgID = 1;
-    //协议体
-    bytes MsgBody = 2;
-    //消息流水号
-    uint32 PacketNo = 3;
-    //协议名字
-    string MsgName = 4;
+  //协议号
+  int32 MsgID = 1;
+  //消息流水号
+  uint32 PacketNo = 2;
+  //回应的流水号
+  uint32 ReplyNo = 3;
+  //协议体
+  bytes MsgBody = 4;
 }
+
 message ServiceInfo
 {
-    enum SKind {
-        None = 0;
-        Game = 1;
-        Gate = 2;
-    }
-    // 服务ID
-    int32 ID = 1;
-    // 区服Id
-    int32 Zone = 2;
-    // 服务类型
-    SKind Kind = 3;
-    // GRPC IP地址
-    string IP = 4;
-    // GRPC 端口
-    int32 Port = 5;
+  enum SKind {
+    None = 0;
+    Login = 1;
+    Gate = 2;
+    Game = 3;
+  }
+  // 服务ID
+  uint32 ID = 1;
+  // 区服Id
+  uint32 Zone = 2;
+  // 服务类型
+  SKind Kind = 3;
+  //login配置
+  LoginConfig LoginConfig = 6;
+  GameConfig GameConfig = 7;
+  GateConfig GateConfig = 8;
+}
+//login配置
+message LoginConfig
+{
+  // http IP地址
+  string IP = 1;
+  // http 端口
+  uint32 Port = 2;
+
+  //Mysql 地址
+  string DbURL = 3;
+  //Mysql最大连接数
+  int32 DbMaxCon = 4;
+  //Zone Redis
+  string RedisAddr = 5;
+  string RedisAuth = 6;
+  int32 RedisIndex = 7;
+  int32 RedisIdle = 8;
+  int32 RedisTimeout = 9;
+  //Crosse Redis
+  string CrosseAddr = 10;
+  string CrosseAuth = 11;
+  int32 CrosseIndex = 12;
+}
+//game配置
+message GameConfig {
+  // GRPC IP地址
+  string IP = 1;
+  // GRPC 端口
+  uint32 Port = 2;
+}
+//gate配置
+message GateConfig {
+  // GRPC IP地址
+  string IP = 1;
+  // GRPC 端口
+  uint32 Port = 2;
 }

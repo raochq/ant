@@ -10,9 +10,10 @@ fi
 
 proto() {
   echo "proto"
-
+  GOOS=$(go env GOOS)
+  export PATH=$(pwd)/tools/$GOOS:$PATH
   PROTO_SRC=./protocol/proto
-  PROTO_DEST=./protocol/pb
+  PROTO_DEST=./protocol
   GENGO=go_out
   echo "gen proto ..."
   test -d ${PROTO_DEST} || mkdir -p ${PROTO_DEST}
