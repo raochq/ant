@@ -16,7 +16,7 @@ type RPCServer struct {
 
 var _ pb.GameServiceServer = (*RPCServer)(nil)
 
-func (g *RPCServer) startGrpc(port int32) error {
+func (g *RPCServer) startGrpc(port uint32) error {
 	rpcAddr := fmt.Sprintf("0.0.0.0:%d", port)
 	lis, err := net.Listen("tcp", rpcAddr)
 	if err != nil {

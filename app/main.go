@@ -4,15 +4,17 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"github.com/google/gops/agent"
-	"github.com/raochq/ant/engine/logger"
-	_ "github.com/raochq/ant/game"
-	_ "github.com/raochq/ant/gate"
-	"github.com/raochq/ant/service"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/google/gops/agent"
+	"github.com/raochq/ant/engine/logger"
+	_ "github.com/raochq/ant/game"
+	_ "github.com/raochq/ant/gate"
+	_ "github.com/raochq/ant/login"
+	"github.com/raochq/ant/service"
 )
 
 var (

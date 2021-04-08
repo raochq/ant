@@ -1,11 +1,12 @@
 {
   "serviceIDs": [
+    "/Zone/1/Login/1",
     "/Zone/1/Game/1",
     "/Zone/1/Gate/1"
   ],
   "etcd": [
-    "http://192.168.12.36:2379"
+    "http://127.0.0.1:2379"
   ],
-  "logPath": "../log/game.log",
+  "logPath": "../log/app.log",
   "logLevel": "debug"
 }
