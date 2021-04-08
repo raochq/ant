@@ -3,13 +3,16 @@ package game
 import (
 	"context"
 	"fmt"
+
 	"github.com/raochq/ant/protocol/pb"
 	"github.com/raochq/ant/service"
-	"go.etcd.io/etcd/clientv3"
+	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 type Game struct {
-	pb.ServiceInfo
+	id     uint32
+	zoneID uint32
+	config *pb.GameConfig
 	RPCServer
 
 	name string
@@ -22,7 +25,8 @@ func (g *Game) Init() error {
 	if err != nil {
 		return err
 	}
-	if err = g.startGrpc(g.Port); err != nil {
+	cfg := g.config
+	if err = g.startGrpc(cfg.Port); err != nil {
 		return err
 	}
 	svr.WatchETCD(context.TODO(), fmt.Sprintf("%s%s/%d", service.EKey_Service, service.EKey_Zone, svr.Zone), func(evt *clientv3.Event) {
@@ -33,10 +37,24 @@ func (g *Game) Init() error {
 func (g *Game) Destroy() {
 	g.stopGrpc()
 }
+func (g *Game) UpdateState(client *clientv3.Client, leaseId clientv3.LeaseID, key string, state service.State) (err error) {
+	switch state {
+	case service.Running:
+		_, err = client.Put(context.TODO(), key+service.EKey_Addr, fmt.Sprintf("%s:%d", g.config.IP, g.config.Port), clientv3.WithLease(leaseId))
+	case service.Stopping:
+		_, err = client.Delete(context.TODO(), key+service.EKey_Addr)
+	}
+	return
+}
 func New(name string, info pb.ServiceInfo) *Game {
+	if info.GameConfig == nil {
+		return nil
+	}
 	g := &Game{
-		name:        name,
-		ServiceInfo: info,
+		name:   name,
+		id:     info.ID,
+		zoneID: info.Zone,
+		config: info.GameConfig,
 	}
 	g.RPCServer.owner = g
 	return g

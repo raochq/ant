@@ -5,16 +5,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/raochq/ant/engine/utils"
-	"github.com/raochq/ant/protocol/pb"
 	"os"
 	"os/signal"
 	"sync"
 	"syscall"
 	"time"
 
+	"github.com/raochq/ant/engine/utils"
+	"github.com/raochq/ant/protocol/pb"
+
 	"github.com/raochq/ant/engine/logger"
-	"go.etcd.io/etcd/clientv3"
+	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 var (
@@ -35,8 +36,9 @@ type Service struct {
 	pb.ServiceInfo
 
 	name   string
-	chStop chan ServerNotify
 	state  State
+	ctx    context.Context
+	cancel context.CancelFunc
 
 	leaseId  clientv3.LeaseID
 	client   *clientv3.Client
@@ -81,20 +83,22 @@ func CreateService(conf Config) error {
 		info, err := getServiceConf(svrId, conf.Etcd)
 		if err != nil {
 			return fmt.Errorf("GetService error %w", err)
-
 		}
 		obj, ok := gServiceFactory.Load(info.Kind)
 		if !ok {
 			return fmt.Errorf("unknown service %v", info.Kind)
 		}
 		fn := obj.(CreateServiceFunc)
-
+		newSvr := fn(svrId, *info)
+		if newSvr == nil {
+			return fmt.Errorf("CreateService %v failed", info.Kind)
+		}
 		svr := &Service{
-			IService:    fn(svrId, *info),
+			IService:    newSvr,
 			ServiceInfo: *info,
 			name:        svrId,
-			chStop:      make(chan ServerNotify, 1),
 		}
+		svr.ctx, svr.cancel = context.WithCancel(context.Background())
 		if _, ok = gServiceList.LoadOrStore(svr.name, svr); ok {
 			return fmt.Errorf("service %s is already registered", svr.name)
 		}
@@ -220,7 +224,8 @@ func (s *Service) synState() (err error) {
 			return
 		}
 	case Running:
-		_, err = s.client.Put(context.TODO(), EKey_Service+s.Key()+EKey_Addr, fmt.Sprintf("%s:%d", s.IP, s.Port), clientv3.WithLease(s.leaseId))
+		err = s.UpdateState(s.client, s.leaseId, EKey_Service+s.Key(), s.state)
+		//_, err = s.client.Put(context.TODO(), EKey_Service+s.Key()+EKey_Addr, fmt.Sprintf("%s:%d", s.IP, s.Port), clientv3.WithLease(s.leaseId))
 		if err != nil {
 			logger.Error("%s synState error: %v", s.Key(), err)
 			return
@@ -236,7 +241,9 @@ func (s *Service) synState() (err error) {
 			logger.Error("%s synState error: %v", s.Key(), err)
 			return
 		}
-		_, err = s.client.Delete(context.TODO(), EKey_Service+s.Key()+EKey_Addr)
+
+		err = s.UpdateState(s.client, s.leaseId, EKey_Service+s.Key(), s.state)
+		//_, err = s.client.Delete(context.TODO(), EKey_Service+s.Key()+EKey_Addr)
 		if err != nil {
 			logger.Error("%s synState error: %v", s.Key(), err)
 			return
@@ -278,19 +285,8 @@ func (s *Service) loop() {
 	defer utils.PrintPanicStack()
 	for {
 		select {
-		case c, ok := <-s.chStop:
-			if !ok {
-				return
-			}
-			switch c {
-			case notifyStop:
-				return
-			case notifyReloadCSV:
-			case notifyReloadConf:
-			case notifyReport:
-			default:
-				return
-			}
+		case <-s.ctx.Done():
+			return
 		case <-s.leaseSig:
 		}
 	}
@@ -299,9 +295,8 @@ func (s *Service) loop() {
 
 //关闭服务器，非阻塞
 func (s *Service) close() {
-	select {
-	case s.chStop <- notifyStop:
-	default:
+	if s.cancel != nil {
+		s.cancel()
 	}
 }
 func (s *Service) stop() {

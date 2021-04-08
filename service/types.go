@@ -2,7 +2,9 @@ package service
 
 import (
 	"fmt"
+
 	"github.com/raochq/ant/protocol/pb"
+	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 //ETCD Key
@@ -38,19 +40,10 @@ func (s State) String() string {
 	return fmt.Sprintf("%d", s)
 }
 
-// 服务消息类型
-type ServerNotify = uint8
-
-const (
-	notifyStop ServerNotify = iota
-	notifyReloadCSV
-	notifyReloadConf
-	notifyReport
-)
-
 type IService interface {
-	Init() error // 初始化
-	Destroy()    // 销毁服务
+	Init() error                                                         // 初始化
+	UpdateState(*clientv3.Client, clientv3.LeaseID, string, State) error // 向ETCD更新消息
+	Destroy()                                                            // 销毁服务
 }
 
 type CreateServiceFunc func(string, pb.ServiceInfo) IService

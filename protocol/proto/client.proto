@@ -3,13 +3,13 @@ package pb;
 option go_package = "/pb";
 // Ping
 message MsgPing {
-    // 时间戳
-    int64 Time = 1;
+  // 时间戳
+  int64 Time = 1;
 }
 // pong
 message MsgPong {
-    // 时间戳
-    int64 Time = 1;
-    // 来源间戳
-    int64 Origin = 2;
+  // 时间戳
+  int64 Time = 1;
+  // 来源间戳
+  int64 Origin = 2;
 }

@@ -4,8 +4,7 @@ package pb;
 option go_package = "/pb";
 
 // 协议头
-message MsgHead
-{
+message MsgHead {
   //协议号
   int32 MsgID = 1;
   //消息流水号
@@ -16,8 +15,7 @@ message MsgHead
   bytes MsgBody = 4;
 }
 
-message ServiceInfo
-{
+message ServiceInfo {
   enum SKind {
     None = 0;
     Login = 1;
@@ -30,42 +28,41 @@ message ServiceInfo
   uint32 Zone = 2;
   // 服务类型
   SKind Kind = 3;
-  //login配置
+  // login配置
   LoginConfig LoginConfig = 6;
   GameConfig GameConfig = 7;
   GateConfig GateConfig = 8;
 }
-//login配置
-message LoginConfig
-{
+// login配置
+message LoginConfig {
   // http IP地址
   string IP = 1;
   // http 端口
   uint32 Port = 2;
 
-  //Mysql 地址
+  // Mysql 地址
   string DbURL = 3;
-  //Mysql最大连接数
+  // Mysql最大连接数
   int32 DbMaxCon = 4;
-  //Zone Redis
+  // Zone Redis
   string RedisAddr = 5;
   string RedisAuth = 6;
   int32 RedisIndex = 7;
   int32 RedisIdle = 8;
   int32 RedisTimeout = 9;
-  //Crosse Redis
+  // Crosse Redis
   string CrosseAddr = 10;
   string CrosseAuth = 11;
   int32 CrosseIndex = 12;
 }
-//game配置
+// game配置
 message GameConfig {
   // GRPC IP地址
   string IP = 1;
   // GRPC 端口
   uint32 Port = 2;
 }
-//gate配置
+// gate配置
 message GateConfig {
   // GRPC IP地址
   string IP = 1;

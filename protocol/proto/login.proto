@@ -1,7 +1,7 @@
 syntax = "proto3";
 package pb;
 option go_package = "/pb";
-message Account{
+message Account {
   // 角色ID
   int64 ID = 1;
   // 账号ID
@@ -17,14 +17,14 @@ message Account{
   string LastIP = 10;
   string ClientVer = 11;
   //渠道 1:ios 2:安卓官方 3:合作渠道
-  uint32   Platform = 12;
+  uint32 Platform = 12;
   uint32 Type = 13;
   bool IsLoggedIn = 14;
   uint32 IsForbidden = 15;
   uint32 ForbidReason = 16;
   int64 FDuration = 17;
   string ChatNeteaseToken = 18;
-  int64  FTime = 19;  // forbidden time
-  int64    CTime = 20;
-  int64  MTime = 21;
+  int64 FTime = 19; // forbidden time
+  int64 CTime = 20;
+  int64 MTime = 21;
 }

@@ -4,7 +4,7 @@ option go_package = "/pb";
 
 // 绑定协议id，用"_"+协议名称确定枚举名称
 enum MsgID {
-    _Invalid = 0;
-    _MsgPing = 1;
-    _MsgPong = 2;
+  _Invalid = 0;
+  _MsgPing = 1;
+  _MsgPong = 2;
 }
