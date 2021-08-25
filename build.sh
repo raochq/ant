@@ -11,13 +11,22 @@ fi
 proto() {
   echo "proto"
   GOOS=$(go env GOOS)
+  GOARCH=$(go env GOARCH)
   export PATH=$(pwd)/tools/$GOOS:$PATH
+
+  exPath="$(pwd)/tools/$GOOS"_"$GOARCH"
+  if [ -d "$exPath" ]; then
+    export PATH="$exPath":$PATH
+  fi
+  
   PROTO_SRC=./protocol/proto
   PROTO_DEST=./protocol
   GENGO=go_out
+  GENGRPC=go-grpc_out
   echo "gen proto ..."
   test -d ${PROTO_DEST} || mkdir -p ${PROTO_DEST}
-  protoc -I=${PROTO_SRC} --${GENGO}=plugins=grpc:${PROTO_DEST} ${PROTO_SRC}/*.proto
+  protoc -I=${PROTO_SRC} --${GENGO}=${PROTO_DEST} ${PROTO_SRC}/*.proto
+  protoc -I=${PROTO_SRC} --${GENGRPC}=${PROTO_DEST} ${PROTO_SRC}/*.proto
   echo "gen proto ok"
 }
 
