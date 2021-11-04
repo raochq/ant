@@ -2,181 +2,159 @@ package logger
 
 import (
 	"fmt"
-	"gopkg.in/natefinch/lumberjack.v2"
-	"io"
-	"log"
+	"github.com/pkg/errors"
 	"os"
 	"path/filepath"
-)
+	"runtime"
+	"strings"
+	"time"
 
-type LogLevel int8
-
-const (
-	LogLevel_None LogLevel = iota
-	LogLevel_Fatal
-	LogLevel_Error
-	LogLevel_Warn
-	LogLevel_Info
-	LogLevel_Debug
-)
-
-type PrefixStyle int8
-
-const (
-	PrefixStyle_None PrefixStyle = iota
-	PrefixStyle_Normal
-	PrefixStyle_Color
+	//"github.com/lestrrat/go-file-rotatelogs"
+	"github.com/lestrrat-go/file-rotatelogs"
+	"github.com/mattn/go-colorable"
+	"github.com/rifflock/lfshook"
+	"github.com/sirupsen/logrus"
 )
 
 var (
-	gLogger      = New(LogLevel_Info, os.Stdout, PrefixStyle_Normal, log.LstdFlags|log.Lshortfile)
-	colorPrefixs = []string{
-		"",
-		"\033[0;33mFATAL:\033[0m ",
-		"\033[0;31mERROR:\033[0m ",
-		"\033[0;35mWARN:\033[0m ",
-		"\033[0;32mINFO:\033[0m ",
-		"\033[0;36mDEBUG:\033[0m ",
-	}
-	normalPrefixs = []string{
-		"",
-		"FATAL: ",
-		"ERROR: ",
-		"WARN: ",
-		"INFO: ",
-		"DEBUG: ",
-	}
+	gLogger = New(logrus.DebugLevel, true)
 )
 
-type logger struct {
-	level                         LogLevel
-	out                           io.Writer
-	debug, info, warn, err, fatal *log.Logger
+type FireFn func(ent *logrus.Entry) error
+
+func (f FireFn) Levels() []logrus.Level {
+	return []logrus.Level{
+		logrus.PanicLevel,
+		logrus.FatalLevel,
+		logrus.ErrorLevel,
+		logrus.WarnLevel,
+		logrus.InfoLevel,
+		logrus.DebugLevel,
+		logrus.TraceLevel,
+	}
+}
+func (f FireFn) Fire(ent *logrus.Entry) error {
+	return f(ent)
 }
 
-func New(level LogLevel, out io.Writer, style PrefixStyle, flag int) *logger {
-	var prefix []string
-	switch style {
-	case PrefixStyle_Normal:
-		prefix = normalPrefixs
-	case PrefixStyle_Color:
-		prefix = colorPrefixs
-	default:
-		prefix = make([]string, 6)
+func caller() string {
+	_, file, line, ok := runtime.Caller(11)
+	if ok {
+		return fmt.Sprintf("%s:%d", filepath.Base(file), line)
 	}
+	return ""
+}
+func New(level logrus.Level, fileFlag bool) *logrus.Logger {
+	l := logrus.New()
 
-	l := &logger{
-		level: level,
-		out:   out,
-		debug: log.New(out, prefix[LogLevel_Debug], flag),
-		info:  log.New(out, prefix[LogLevel_Info], flag),
-		warn:  log.New(out, prefix[LogLevel_Warn], flag),
-		err:   log.New(out, prefix[LogLevel_Error], flag),
-		fatal: log.New(out, prefix[LogLevel_Fatal], flag),
+	if fileFlag {
+		l.AddHook(FireFn(func(ent *logrus.Entry) error {
+			ent.Data["file"] = caller()
+			return nil
+		}))
 	}
+	l.SetLevel(level)
+	l.SetOutput(colorable.NewColorableStdout())
+	l.SetFormatter(&logrus.TextFormatter{
+		ForceColors: true,
+		//FullTimestamp:   true,
+		//TimestampFormat: "15:04:05.000",
+	})
 	return l
 }
-func (l *logger) SetLogLevel(level string) {
-	lv := LogLevel_Info
-	switch level {
-	case "debug":
-		lv = LogLevel_Debug
-	case "info":
-		lv = LogLevel_Info
-	case "warn":
-		lv = LogLevel_Warn
-	case "error":
-		lv = LogLevel_Error
-	case "fatal":
-		lv = LogLevel_Fatal
-	default:
-		lv = LogLevel_Info
+
+func setOutputFile(l *logrus.Logger, filename string) {
+	if filename == "" {
+		return
 	}
-	l.level = lv
+	ext := filepath.Ext(filename)
+	filename = strings.TrimSuffix(filename, ext)
+
+	if !filepath.IsAbs(filename) {
+		filename, _ = filepath.Abs(filepath.Join(filepath.Dir(os.Args[0]), filename))
+	}
+	dir := filepath.Dir(filename)
+	if _, e := os.Stat(dir); e != nil {
+		if os.IsNotExist(e) {
+			if e := os.MkdirAll(dir, 0777); e != nil {
+				logrus.Fatalf("create log dir failed %v", e)
+			}
+		}
+	}
+	out, err := rotatelogs.New(
+		filename+".%Y%m%d_%H"+ext,
+		rotatelogs.WithLinkName(filename+ext), // 生成软链，指向最新日志文件
+		//rotatelogs.WithMaxAge(28*24*time.Hour), // 文件最大保存时间
+		rotatelogs.WithMaxAge(-1),              // 保存文件个数
+		rotatelogs.WithRotationCount(10),       // 保存文件个数
+		rotatelogs.WithRotationTime(time.Hour), // 日志切割时间间隔
+	)
+	logrus.Errorf("config local file system logger error. %+v", errors.WithStack(err))
+	ext = ".error" + ext
+	errOut, _ := rotatelogs.New(
+		filename+".%Y%m%d"+ext,
+		rotatelogs.WithLinkName(filename+ext), // 生成软链，指向最新日志文件
+	)
+
+	fileHook := lfshook.NewHook(lfshook.WriterMap{
+		logrus.DebugLevel: out, // 为不同级别设置不同的输出目的
+		logrus.InfoLevel:  out,
+		logrus.WarnLevel:  out,
+		logrus.ErrorLevel: out,
+		logrus.FatalLevel: out,
+		logrus.PanicLevel: out,
+	}, &logrus.TextFormatter{
+		FullTimestamp:   true,
+		TimestampFormat: "15:04:05.0000",
+	})
+
+	l.AddHook(fileHook)
+	errHook := lfshook.NewHook(lfshook.WriterMap{
+		logrus.ErrorLevel: errOut,
+		logrus.FatalLevel: errOut,
+		logrus.PanicLevel: errOut,
+	}, &logrus.TextFormatter{
+		FullTimestamp: true,
+	})
+	l.AddHook(errHook)
 }
 
 func SetLogLevel(level string) {
-	gLogger.SetLogLevel(level)
-}
-
-func (l *logger) SetPrefixStyle(style PrefixStyle) {
-	var prefix []string
-	switch style {
-	case PrefixStyle_Normal:
-		prefix = normalPrefixs
-	case PrefixStyle_Color:
-		prefix = colorPrefixs
-	default:
-		prefix = make([]string, 6)
+	lv, err := logrus.ParseLevel(level)
+	if err == nil {
+		gLogger.SetLevel(lv)
 	}
-	l.debug.SetPrefix(prefix[LogLevel_Debug])
-	l.info.SetPrefix(prefix[LogLevel_Info])
-	l.warn.SetPrefix(prefix[LogLevel_Warn])
-	l.err.SetPrefix(prefix[LogLevel_Error])
-	l.fatal.SetPrefix(prefix[LogLevel_Fatal])
-}
-func SetPrefixStyle(style PrefixStyle) {
-	gLogger.SetPrefixStyle(style)
-}
-
-func (l *logger) SetOutPut(out io.Writer) {
-	l.out = out
-	l.debug.SetOutput(out)
-	l.info.SetOutput(out)
-	l.warn.SetOutput(out)
-	l.err.SetOutput(out)
-	l.fatal.SetOutput(out)
-}
-func SetOutput(out io.Writer) {
-	gLogger.SetOutPut(out)
 }
 func SetOutputFile(filename string) {
-	if !filepath.IsAbs(filename) {
-		filename, _ = filepath.Abs(filepath.Dir(os.Args[0]) + "/" + filename)
-	}
-	l := gLogger
-	if filename == "" {
-		if val, ok := l.out.(*lumberjack.Logger); ok {
-			val.Close()
-		}
-		l.SetOutPut(os.Stdout)
-	} else {
-		if val, ok := l.out.(*lumberjack.Logger); ok {
-			val.Filename = filename
-		} else {
-			out := &lumberjack.Logger{
-				Filename:   filename,
-				MaxSize:    10, // megabytes
-				MaxBackups: 10,
-				MaxAge:     28, //days
-			}
-			l.SetOutPut(out)
-		}
-	}
+	setOutputFile(gLogger, filename)
 }
 
 // Debug log debug protocol with cyan color.
 func Debug(format string, v ...interface{}) {
-	gLogger.debug.Output(2, fmt.Sprintf(format, v...))
+	gLogger.Debugf(format, v...)
 }
 
 // Info log normal protocol.
 func Info(format string, v ...interface{}) {
-	gLogger.info.Output(2, fmt.Sprintf(format, v...))
+	gLogger.Infof(format, v...)
 }
 
 // Warn log error protocol
 func Warn(format string, v ...interface{}) {
-	gLogger.warn.Output(2, fmt.Sprintf(format, v...))
+	gLogger.Warnf(format, v...)
 }
 
 // Error log error protocol with red color.
 func Error(format string, v ...interface{}) {
-	gLogger.err.Output(2, fmt.Sprintf(format, v...))
+	gLogger.Errorf(format, v...)
 }
 
 // Fatal log error protocol
 func Fatal(format string, v ...interface{}) {
-	gLogger.fatal.Output(2, fmt.Sprintf(format, v...))
-	os.Exit(1)
+	gLogger.Fatalf(format, v...)
+}
+
+// Panic log error protocol
+func Panic(format string, v ...interface{}) {
+	gLogger.Panicf(format, v...)
 }
