@@ -10,11 +10,10 @@ import (
 )
 
 type RPCServer struct {
+	pb.UnimplementedGameServiceServer
 	owner *Game
 	svr   *grpc.Server
 }
-
-var _ pb.GameServiceServer = (*RPCServer)(nil)
 
 func (g *RPCServer) startGrpc(port uint32) error {
 	rpcAddr := fmt.Sprintf("0.0.0.0:%d", port)

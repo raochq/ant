@@ -33,7 +33,6 @@ proto() {
 build() {
   OUTPUT_DIR=$(pwd)/bin
   GOOS=$(go env GOOS)
-  GOEXE=$(go env GOEXE)
   GO_VERSION=$(go version)
   major="1"
   minor="0"
@@ -59,9 +58,9 @@ build() {
 
   echo "build version ${APP_VERSION}"
 
-  for APP_NAME in $@; do
+  for APP_NAME in "$@"; do
     echo "build ${APP_NAME}"
-    go build -o ${OUTPUT_DIR}/${APP_NAME}${GOEXE} \
+    go build -o ${OUTPUT_DIR}/\
       -gcflags "all=-N -l" \
       -ldflags "-s -X 'main.AppName=${APP_NAME}' \
             -X 'main.AppVersion=${APP_VERSION}' \
