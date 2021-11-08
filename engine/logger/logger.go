@@ -2,7 +2,6 @@ package logger
 
 import (
 	"fmt"
-	"github.com/pkg/errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -12,6 +11,7 @@ import (
 	//"github.com/lestrrat/go-file-rotatelogs"
 	"github.com/lestrrat-go/file-rotatelogs"
 	"github.com/mattn/go-colorable"
+	"github.com/pkg/errors"
 	"github.com/rifflock/lfshook"
 	"github.com/sirupsen/logrus"
 )
@@ -83,7 +83,7 @@ func setOutputFile(l *logrus.Logger, filename string) {
 	}
 	out, err := rotatelogs.New(
 		filename+".%Y%m%d_%H"+ext,
-		rotatelogs.WithLinkName(filename+ext), // 生成软链，指向最新日志文件
+		withLinkName(filename+ext), // 生成软链，指向最新日志文件
 		//rotatelogs.WithMaxAge(28*24*time.Hour), // 文件最大保存时间
 		rotatelogs.WithMaxAge(-1),              // 保存文件个数
 		rotatelogs.WithRotationCount(10),       // 保存文件个数
@@ -93,7 +93,7 @@ func setOutputFile(l *logrus.Logger, filename string) {
 	ext = ".error" + ext
 	errOut, _ := rotatelogs.New(
 		filename+".%Y%m%d"+ext,
-		rotatelogs.WithLinkName(filename+ext), // 生成软链，指向最新日志文件
+		withLinkName(filename+ext), // 生成软链，指向最新日志文件
 	)
 
 	fileHook := lfshook.NewHook(lfshook.WriterMap{
