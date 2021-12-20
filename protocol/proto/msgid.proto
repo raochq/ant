@@ -1,6 +1,6 @@
 syntax = "proto3";
 package pb;
-option go_package = "/pb";
+option go_package = ".;pb";
 
 // 绑定协议id，用"_"+协议名称确定枚举名称
 enum MsgID {

@@ -14,13 +14,13 @@ proto() {
   GOARCH=$(go env GOARCH)
   export PATH=$(pwd)/tools/$GOOS:$PATH
 
-  exPath="$(pwd)/tools/$GOOS"_"$GOARCH"
-  if [ -d "$exPath" ]; then
-    export PATH="$exPath":$PATH
-  fi
+  # exPath="$(pwd)/tools/$GOOS"_"$GOARCH"
+  # if [ -d "$exPath" ]; then
+  #   export PATH="$exPath":$PATH
+  # fi
   
   PROTO_SRC=./protocol/proto
-  PROTO_DEST=./protocol
+  PROTO_DEST=./protocol/pb
   GENGO=go_out
   GENGRPC=go-grpc_out
   echo "gen proto ..."
