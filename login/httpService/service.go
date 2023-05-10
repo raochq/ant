@@ -6,10 +6,10 @@ import (
 	"time"
 
 	"github.com/raochq/ant/common"
-	"github.com/raochq/ant/engine/logger"
 	"github.com/raochq/ant/login/dao"
 	"github.com/raochq/ant/protocol/pb"
 	"github.com/raochq/ant/util"
+	"github.com/raochq/ant/util/logger"
 )
 
 type LoginService struct {
@@ -39,7 +39,7 @@ func (srv *LoginService) getUniqueAccountID() (int64, error) {
 	return ticket64, nil
 }
 
-//用户登录
+// 用户登录
 func (srv *LoginService) userLogin(account *pb.Account) error {
 	//todo: 登录限制检查
 	accountDB, err := dao.FindOneByUserNameForUpdate(account.UserName)

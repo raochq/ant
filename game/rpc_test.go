@@ -3,10 +3,12 @@ package game
 import (
 	"context"
 	"fmt"
-	"github.com/raochq/ant/protocol/pb"
-	"google.golang.org/grpc"
 	"testing"
 	"time"
+
+	"google.golang.org/grpc"
+
+	"github.com/raochq/ant/protocol/pb"
 )
 
 func TestRPCServer_Echo(t *testing.T) {

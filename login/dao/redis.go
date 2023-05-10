@@ -4,8 +4,9 @@ import (
 	"time"
 
 	"github.com/gomodule/redigo/redis"
-	"github.com/raochq/ant/engine/logger"
-	"github.com/raochq/ant/protocol/pb"
+
+	"github.com/raochq/ant/config"
+	"github.com/raochq/ant/util/logger"
 )
 
 var (
@@ -63,9 +64,9 @@ func SetAccountToken(accountID int64, token string) {
 	}
 }
 
-func InitRedis(cfg *pb.LoginConfig) {
-	pool = newRedisPool(cfg.RedisIdle, cfg.RedisTimeout, cfg.RedisAddr, cfg.RedisAuth, cfg.RedisIndex)
-	crossPool = newRedisPool(cfg.RedisIdle, cfg.RedisTimeout, cfg.CrosseAddr, cfg.CrosseAuth, cfg.CrosseIndex)
+func InitRedis(cfg config.Redis) {
+	pool = newRedisPool(cfg.Idle, cfg.Timeout, cfg.Addr, cfg.Auth, cfg.Index)
+	crossPool = newRedisPool(cfg.Idle, cfg.Timeout, cfg.CrosseAddr, cfg.CrosseAuth, cfg.CrosseIndex)
 }
 
 func newRedisPool(maxIdle, timeout int32, addr, auth string, index int32) *redis.Pool {

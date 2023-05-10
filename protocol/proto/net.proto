@@ -14,20 +14,20 @@ message MsgHead {
   //协议体
   bytes MsgBody = 4;
 }
+enum ServiceKind{
+  None = 0;
+  Login = 1;
+  Gate = 2;
+  Game = 3;
+}
 
 message ServiceInfo {
-  enum SKind {
-    None = 0;
-    Login = 1;
-    Gate = 2;
-    Game = 3;
-  }
   // 服务ID
   uint32 ID = 1;
   // 区服Id
   uint32 Zone = 2;
   // 服务类型
-  SKind Kind = 3;
+  ServiceKind Kind = 3;
   // login配置
   LoginConfig LoginConfig = 6;
   GameConfig GameConfig = 7;

@@ -1,67 +1,72 @@
 package game
 
 import (
-	"context"
-	"fmt"
-
+	"github.com/raochq/ant/config"
 	"github.com/raochq/ant/protocol/pb"
 	"github.com/raochq/ant/service"
-	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 type Game struct {
-	id     uint32
-	zoneID uint32
-	config *pb.GameConfig
 	RPCServer
+	config *config.Game
 
-	name string
+	rpcAddr   string
+	name      string
+	PlayerCnt int32
+}
+type gameState struct {
+	PlayerCnt int32  `json:"cnt"`
+	Rpc       string `json:"rpc"`
+}
+
+func (g *Game) Name() string {
+	return g.name
 }
 
 var _ service.IService = (*Game)(nil)
 
 func (g *Game) Init() error {
-	svr, err := service.GetService(g.name)
+	cfg := g.config
+	addr, err := g.startGrpc(cfg.RPC)
 	if err != nil {
 		return err
 	}
-	cfg := g.config
-	if err = g.startGrpc(cfg.Port); err != nil {
-		return err
-	}
-	svr.WatchETCD(context.TODO(), fmt.Sprintf("%s%s/%d", service.EKey_Service, service.EKey_Zone, svr.Zone), func(evt *clientv3.Event) {
-		fmt.Println("watchETCD:", evt)
-	})
+	g.rpcAddr = addr
 	return nil
 }
-func (g *Game) Destroy() {
+
+func (g *Game) StateInfo() interface{} {
+	return gameState{
+		PlayerCnt: g.PlayerCnt,
+		Rpc:       g.rpcAddr,
+	}
+}
+
+func (g *Game) Close() {
 	g.stopGrpc()
 }
-func (g *Game) UpdateState(client *clientv3.Client, leaseId clientv3.LeaseID, key string, state service.State) (err error) {
-	switch state {
-	case service.Running:
-		_, err = client.Put(context.TODO(), key+service.EKey_Addr, fmt.Sprintf("%s:%d", g.config.IP, g.config.Port), clientv3.WithLease(leaseId))
-	case service.Stopping:
-		_, err = client.Delete(context.TODO(), key+service.EKey_Addr)
-	}
-	return
+
+func (g *Game) Zone() uint32 {
+	return g.config.Zone
 }
-func New(name string, info pb.ServiceInfo) *Game {
-	if info.GameConfig == nil {
+
+func New(conf *config.Game) *Game {
+	if conf == nil {
 		return nil
 	}
 	g := &Game{
-		name:   name,
-		id:     info.ID,
-		zoneID: info.Zone,
-		config: info.GameConfig,
+		name:   conf.UniqueID(),
+		config: conf,
 	}
 	g.RPCServer.owner = g
 	return g
 }
 
 func init() {
-	service.Register(pb.ServiceInfo_Game, func(name string, info pb.ServiceInfo) service.IService {
-		return New(name, info)
+	service.Register(pb.ServiceKind_Game.String(), func(conf config.Config) service.IService {
+		if c, ok := conf.(*config.Game); ok {
+			return New(c)
+		}
+		return nil
 	})
 }

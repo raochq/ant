@@ -4,9 +4,11 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+
 	_ "github.com/go-sql-driver/mysql"
-	"github.com/raochq/ant/engine/logger"
+
 	"github.com/raochq/ant/protocol/pb"
+	"github.com/raochq/ant/util/logger"
 )
 
 const (
@@ -60,7 +62,7 @@ func UpdateAccountLoginInfo(accountID int64, lastIP string, userToken string, is
 	return nil
 }
 
-//添加用户
+// 添加用户
 func AddAccount(account *pb.Account) (int64, error) {
 	res, err := gDBDao.Exec(InsertAccountSQL, account.ID, account.UserName, account.PassHash, account.UserToken, account.LastIP,
 		account.Platform, account.CTime, account.MTime, account.ChatNeteaseToken, account.IsLoggedIn)

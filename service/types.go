@@ -3,11 +3,10 @@ package service
 import (
 	"fmt"
 
-	"github.com/raochq/ant/protocol/pb"
-	clientv3 "go.etcd.io/etcd/client/v3"
+	"github.com/raochq/ant/config"
 )
 
-//ETCD Key
+// ETCD Key
 const (
 	EKey_Config  = "/Config"  // 服务配置
 	EKey_Service = "/Service" // 服务列表
@@ -20,33 +19,33 @@ const (
 type State uint8
 
 const (
-	Stopped State = iota
-	Init
-	Running
-	Stopping
+	SSStopped State = iota
+	SSInit
+	SSRunning
+	SSStopping
 )
 
 func (s State) String() string {
 	switch s {
-	case Stopped:
+	case SSStopped:
 		return "stopped"
-	case Init:
+	case SSInit:
 		return "init"
-	case Running:
+	case SSRunning:
 		return "running"
-	case Stopping:
+	case SSStopping:
 		return "stopping"
 	}
 	return fmt.Sprintf("%d", s)
 }
 
 type IService interface {
-	Init() error                                                         // 初始化
-	UpdateState(*clientv3.Client, clientv3.LeaseID, string, State) error // 向ETCD更新消息
-	Destroy()                                                            // 销毁服务
+	Init() error            // 初始化
+	Close()                 // 关闭服务
+	StateInfo() interface{} // 状态信息
 }
 
-type CreateServiceFunc func(string, pb.ServiceInfo) IService
+type CreateServiceFunc func(config.Config) IService
 
 type Config struct {
 	ServiceIDs []string

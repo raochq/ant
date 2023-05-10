@@ -1,13 +1,10 @@
 package gate
 
 import (
-	"context"
-	"fmt"
-
-	"github.com/raochq/ant/engine/logger"
+	"github.com/raochq/ant/config"
 	"github.com/raochq/ant/protocol/pb"
 	"github.com/raochq/ant/service"
-	clientv3 "go.etcd.io/etcd/client/v3"
+	"github.com/raochq/ant/util/logger"
 )
 
 type Gate struct {
@@ -19,6 +16,12 @@ type Gate struct {
 	state service.State
 }
 
+var _ service.IService = (*Gate)(nil)
+
+func (g *Gate) StateInfo() interface{} {
+	return nil
+}
+
 func (g *Gate) Stop() {
 }
 
@@ -26,18 +29,10 @@ func (g *Gate) Init() error {
 	logger.Info("Gate init...\n")
 	return nil
 }
-func (g *Gate) Destroy() {
+func (g *Gate) Close() {
 	logger.Info("Gate destroy...\n")
 }
-func (g *Gate) UpdateState(client *clientv3.Client, leaseId clientv3.LeaseID, key string, state service.State) (err error) {
-	switch state {
-	case service.Running:
-		_, err = client.Put(context.TODO(), key+service.EKey_Addr, fmt.Sprintf("%s:%d", g.config.IP, g.config.Port), clientv3.WithLease(leaseId))
-	case service.Stopping:
-		_, err = client.Delete(context.TODO(), key+service.EKey_Addr)
-	}
-	return nil
-}
+
 func (g *Gate) MainLoop(sig <-chan byte) {
 	logger.Info("Gate Run in Loop\n")
 }
@@ -54,7 +49,8 @@ func New(name string, info pb.ServiceInfo) *Gate {
 	}
 }
 func init() {
-	service.Register(pb.ServiceInfo_Gate, func(name string, info pb.ServiceInfo) service.IService {
-		return New(name, info)
+	service.Register(pb.ServiceKind_Gate.String(), func(conf config.Config) service.IService {
+		//return New(name, info)
+		return nil
 	})
 }

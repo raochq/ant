@@ -3,15 +3,16 @@ package httpService
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/raochq/ant/common"
-	"github.com/raochq/ant/engine/logger"
-	"github.com/raochq/ant/protocol/pb"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/raochq/ant/common"
+	"github.com/raochq/ant/protocol/pb"
+	"github.com/raochq/ant/util/logger"
 )
 
 // POST 返回统一json
@@ -171,7 +172,7 @@ func (srv *LoginService) UserRegister(wr http.ResponseWriter, r *http.Request) {
 	res["ret"] = 0
 }
 
-//用户登录或注册并登录
+// 用户登录或注册并登录
 func (srv *LoginService) UserLoginOrRegister(wr http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		logger.Error("Method Not Allowed %v", r.Method)

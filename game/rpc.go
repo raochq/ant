@@ -3,10 +3,13 @@ package game
 import (
 	"context"
 	"fmt"
-	"github.com/raochq/ant/engine/logger"
-	"github.com/raochq/ant/protocol/pb"
-	"google.golang.org/grpc"
 	"net"
+	"strconv"
+
+	"github.com/raochq/ant/protocol/pb"
+	"github.com/raochq/ant/util/logger"
+
+	"google.golang.org/grpc"
 )
 
 type RPCServer struct {
@@ -15,28 +18,33 @@ type RPCServer struct {
 	svr   *grpc.Server
 }
 
-func (g *RPCServer) startGrpc(port uint32) error {
-	rpcAddr := fmt.Sprintf("0.0.0.0:%d", port)
+func (g *RPCServer) startGrpc(rpcAddr string) (string, error) {
 	lis, err := net.Listen("tcp", rpcAddr)
 	if err != nil {
-		return fmt.Errorf("GameRPCServer listen %s fail:%w", rpcAddr, err)
+		return "", fmt.Errorf("GameRPCServer listen %s fail:%w", rpcAddr, err)
 	}
+	tcpAddr := lis.Addr().(*net.TCPAddr)
+	addr := tcpAddr.String()
+	if tcpAddr.IP.Equal(net.IPv4zero) || tcpAddr.IP.Equal(net.IPv6zero) {
+		addr = net.JoinHostPort("localhost", strconv.Itoa(tcpAddr.Port))
+	}
+
 	//s := grpc.NewServer( grpc.UnaryInterceptor(ServiceProxy))
 	g.svr = grpc.NewServer()
 	pb.RegisterGameServiceServer(g.svr, g)
 	go g.svr.Serve(lis)
-	logger.Info("===GameRPCServer started===")
-	return nil
+	logger.WithField("rpc", lis.Addr()).Info("=== GameRPCServer started ===")
+	return addr, nil
 }
 
 func (g *RPCServer) stopGrpc() {
 	g.svr.Stop()
-	logger.Info("===GameRPCServer stopped===")
+	logger.Info("=== GameRPCServer stopped ===")
 }
 
 func (g *RPCServer) Echo(ctx context.Context, req *pb.RPCString) (*pb.RPCString, error) {
 	resp := &pb.RPCString{
-		Msg: req.GetMsg(),
+		Msg: "Hello " + req.GetMsg(),
 	}
 	return resp, nil
 }

@@ -2,13 +2,13 @@ package httpService
 
 import (
 	"fmt"
-	"github.com/raochq/ant/engine/logger"
 	"net"
 	"net/http"
+
+	"github.com/raochq/ant/util/logger"
 )
 
-func StartHttpService(port, zoneID uint32) (*http.Server, error) {
-	addr := fmt.Sprintf("0.0.0.0:%d", port)
+func StartHttpService(addr string, zoneID uint32) (*http.Server, error) {
 	l, err := net.Listen("tcp", addr)
 	if err != nil {
 		return nil, fmt.Errorf("LoginHttpService listen %s fail: %w", addr, err)
@@ -24,6 +24,7 @@ func StartHttpService(port, zoneID uint32) (*http.Server, error) {
 		}
 	}()
 	srv.SetKeepAlivesEnabled(true)
+	logger.Info("Start http :%v", l.Addr())
 	return srv, nil
 }
 

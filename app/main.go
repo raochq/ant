@@ -1,24 +1,26 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/google/gops/agent"
-	"github.com/raochq/ant/engine/logger"
+
+	"github.com/raochq/ant/config"
 	_ "github.com/raochq/ant/game"
 	_ "github.com/raochq/ant/gate"
 	_ "github.com/raochq/ant/login"
 	"github.com/raochq/ant/service"
+	"github.com/raochq/ant/util/logger"
 )
 
 var (
-	conf         service.Config
+	confs        []config.Config
 	AppName      = "ant" // 应用名称
 	AppVersion   string  // 应用版本
 	BuildVersion string  // 编译版本
@@ -31,50 +33,78 @@ var (
 func init() {
 	var confFile string
 	bVersion := false
-	flag.StringVar(&confFile, "conf", "", "Location of config, default: $AppName.json")
+	initConf := false
+	flag.StringVar(&confFile, "conf", "", "service of config,split by comma(,), default: all yaml file in current directory")
 	flag.BoolVar(&bVersion, "v", false, "Version information")
+	flag.BoolVar(&initConf, "init", false, "create an default config")
 	flag.Usage = usage
 	flag.Parse()
 	if bVersion {
 		fmt.Print(Version())
 		os.Exit(0)
 	}
+
+	if initConf {
+		config.TrySaveDefaultConfig()
+		os.Exit(0)
+	}
 	if len(os.Args) > 1 && confFile == "" {
 		flag.Usage()
 		os.Exit(0)
 	}
-
-	if confFile == "" {
-		confFile = strings.TrimSuffix(os.Args[0], filepath.Ext(os.Args[0])) + ".json"
+	var list []string
+	if confFile != "" {
+		list = strings.Split(confFile, ",")
+	} else {
+		list = allConfig()
 	}
-	fmt.Printf("conf=%s\n", confFile)
-	b, err := ioutil.ReadFile(confFile)
+
+	logger.Infof("conf=%s\n", confFile)
+	for _, c := range list {
+		conf, err := config.Load(c)
+		if err != nil {
+			logger.Fatalf("load config %v failed %v", confFile, err)
+		}
+		confs = append(confs, conf)
+	}
+}
+func allConfig() []string {
+	curr := "./bin"
+	dir, err := os.ReadDir(curr)
 	if err != nil {
-		logger.Fatal("load config %v failed %v", confFile, err)
+		return nil
 	}
-
-	err = json.Unmarshal(b, &conf)
-	if err != nil {
-		logger.Fatal("unmarshal config %v failed %v", confFile, err)
+	var ans []string
+	for _, fi := range dir {
+		if fi.IsDir() {
+			continue
+		}
+		name := strings.ToLower(fi.Name())
+		if strings.HasSuffix(name, ".yml") || strings.HasSuffix(name, ".yaml") {
+			ans = append(ans, filepath.Join(curr, fi.Name()))
+		}
 	}
-
-	logger.SetOutputFile(conf.LogPath)
-	logger.SetLogLevel(conf.LogLevel)
+	return ans
 }
 
 func main() {
 	logger.Info(Version())
-	if err := service.CreateService(conf); err != nil {
+	if err := service.StartService(confs); err != nil {
 		logger.Fatal("register service failed %v", err)
 	}
-
 	//使用gops性能监控
 	if err := agent.Listen(agent.Options{}); err != nil {
 		logger.Fatal("gops listen fail %v", err)
 	}
 	defer agent.Close()
 
-	service.Run()
+	ch := make(chan os.Signal)
+	signal.Notify(ch, syscall.SIGKILL, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGABRT, syscall.SIGTERM)
+	sig := <-ch
+	logger.WithField("sig", fmt.Sprintf("%v(%d)", sig, int(sig.(syscall.Signal)))).Info("capture signal, exit service")
+
+	service.CloseAll()
+	logger.Info("=== close All service ===")
 }
 
 func usage() {
