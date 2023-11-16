@@ -1,12 +1,11 @@
 package dao
 
 import (
+	"log/slog"
 	"time"
 
 	"github.com/gomodule/redigo/redis"
-
 	"github.com/raochq/ant/config"
-	"github.com/raochq/ant/util/logger"
 )
 
 var (
@@ -20,10 +19,10 @@ func GetTicket64(zoneID uint32) (int64, error) {
 	ticketKey := Gen(TypeAccount, SpecTicket, uint64(zoneID))
 	ticket, err := redis.Int64(con.Do("GET", ticketKey))
 	if err != nil {
-		logger.Error("can't get ticket id from redis for key %s with error %v", ticketKey, err)
+		slog.Error("can't get ticket id from redis", "key", ticketKey, "error", err)
 		return 0, err
 	}
-	logger.Info("GetTicket64, %v", ticket)
+	slog.Info("GetTicket64", "ticket", ticket)
 
 	return ticket, nil
 }
@@ -33,11 +32,11 @@ func GenerateTicketPoolID(zoneID uint32) (int64, error) {
 	ticketKey := Gen(TypeAccount, SpecTicket, uint64(zoneID))
 	ticket, err := redis.Int64(con.Do("INCR", ticketKey))
 	if err != nil {
-		logger.Error("can't incr ticket id from redis for key %s with error %v", ticketKey, err)
+		slog.Error("can't incr ticket id from redis", "key", ticketKey, "error", err)
 		return 0, err
 	}
 
-	logger.Info("GenerateTicketPoolID, %v", ticket)
+	slog.Info("GenerateTicketPoolID", "ticket", ticket)
 	return ticket, nil
 }
 
@@ -60,7 +59,7 @@ func SetAccountToken(accountID int64, token string) {
 	rKey := Gen(TypeUser, "token", uint64(accountID))
 	_, err := conn.Do("Set", rKey, token)
 	if err != nil {
-		logger.Warn("set account token error %s", err.Error())
+		slog.Warn("set account token failed", "error", err.Error())
 	}
 }
 
@@ -76,24 +75,24 @@ func newRedisPool(maxIdle, timeout int32, addr, auth string, index int32) *redis
 		Dial: func() (redis.Conn, error) {
 			c, err := redis.Dial("tcp", addr)
 			if err != nil {
-				logger.Error("ZoneRedis dial fail %s", err.Error())
+				slog.Error("ZoneRedis dial fail", "error", err.Error())
 				return nil, err
 			}
 			if auth != "" {
 				if _, err := c.Do("AUTH", auth); err != nil {
-					logger.Error("c.Do('AUTH', %v) failed(%v)", auth, err)
+					slog.Error("AUTH failed", "auth", auth, "error", err)
 					c.Close()
 					return nil, err
 				}
 			}
 			if index > 0 && index < 16 {
 				if _, err = c.Do("SELECT", index); err != nil {
-					logger.Error("c.Do('SELECT', %v) failed(%v)", index, err)
+					slog.Error("SELECT failed", "index", index, "error", err)
 					c.Close()
 					return nil, err
 				}
 			}
-			logger.Info("ZoneRedis dial success %v %v %v", addr, auth, index)
+			slog.Info("ZoneRedis dial success", "addr", addr, "auth", auth, "index", index)
 			return c, nil
 		},
 		TestOnBorrow: func(c redis.Conn, t time.Time) error {

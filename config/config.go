@@ -60,7 +60,7 @@ type DB struct {
 }
 
 type logInfo struct {
-	Level int32  `yaml:"level"`
+	Level string `yaml:"level"`
 	PATH  string `yaml:"path"`
 }
 

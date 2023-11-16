@@ -1,6 +1,7 @@
 package login
 
 import (
+	"log/slog"
 	"net/http"
 
 	"github.com/raochq/ant/config"
@@ -8,7 +9,6 @@ import (
 	"github.com/raochq/ant/login/httpService"
 	"github.com/raochq/ant/protocol/pb"
 	"github.com/raochq/ant/service"
-	"github.com/raochq/ant/util/logger"
 )
 
 type Login struct {
@@ -42,21 +42,23 @@ func (login *Login) Init() error {
 	cfg := login.config
 	err := dao.InitMysql(cfg.DB.Addr, cfg.DB.MaxCon)
 	if err != nil {
-		logger.Error("Login init DB failed: %v", err)
+		slog.Error("Login init DB failed", "error", err)
 		return err
 	}
 	dao.InitRedis(cfg.Redis)
 	login.srv, err = httpService.StartHttpService(cfg.Listen, login.zoneID)
 	if err != nil {
-		logger.Error("Login startHttpService failed: %v", err)
+		slog.Error("Login startHttpService failed", "error", err)
 		return err
 	}
-	logger.Info("Login init success")
+	slog.Info("Login init success")
 	return nil
 }
 func (login *Login) Close() {
-	login.srv.Close()
-	logger.Info("Login destroy...\n")
+	if login.srv != nil {
+		login.srv.Close()
+	}
+	slog.Info("Login destroy...")
 }
 
 func New(conf *config.Login) *Login {

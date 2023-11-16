@@ -1,6 +1,8 @@
 package httpService
 
 import (
+	"fmt"
+	"log/slog"
 	"net/url"
 	"strconv"
 	"time"
@@ -9,7 +11,6 @@ import (
 	"github.com/raochq/ant/login/dao"
 	"github.com/raochq/ant/protocol/pb"
 	"github.com/raochq/ant/util"
-	"github.com/raochq/ant/util/logger"
 )
 
 type LoginService struct {
@@ -27,12 +28,12 @@ func (srv *LoginService) getUniqueAccountID() (int64, error) {
 	// todo: id号上限检查
 	ticket64, err := dao.GetTicket64(srv.zoneID)
 	if err != nil {
-		logger.Error("GetUniqueAccountID: redis.T64.GetTicket64(%v) failed(%v)", uint(srv.zoneID), err)
+		slog.Error("GetUniqueAccountID: redis.T64.GetTicket64 failed", "zoneid", srv.zoneID, "error", err)
 		return 0, common.RC_Unknown
 	}
 	ticket64, err = dao.GenerateTicketPoolID(srv.zoneID)
 	if err != nil {
-		logger.Error("GetUniqueAccountID: redis.T64.GenerateTicketPoolID(%v) failed(%v)", srv.zoneID, err)
+		slog.Error("GetUniqueAccountID: redis.T64.GenerateTicketPoolID failed", srv.zoneID, "error", err)
 		return 0, common.RC_Unknown
 	}
 	// todo: id号上限检查
@@ -44,7 +45,7 @@ func (srv *LoginService) userLogin(account *pb.Account) error {
 	//todo: 登录限制检查
 	accountDB, err := dao.FindOneByUserNameForUpdate(account.UserName)
 	if err != nil {
-		logger.Error("userDao.FindOneByUserNameForUpdate(\"%s\",\"%s\",\"%s\") failed (%s)", account.UserName, account.PassHash, account.LastIP, err.Error())
+		slog.Error("userDao.FindOneByUserNameForUpdate failed", slog.Group("account", "UserName", account.UserName, "PassHash", account.PassHash, "LastIP", account.LastIP), "error", err)
 		return common.RC_AccoutNotExists
 	}
 	if accountDB == nil {
@@ -52,7 +53,7 @@ func (srv *LoginService) userLogin(account *pb.Account) error {
 	}
 	// verify the password
 	if account.PassHash != accountDB.PassHash {
-		logger.Error("service.Login, user:%s's password not match(%s)", account.UserName, account.PassHash)
+		slog.Error("service.Login, password not match", slog.Group("account", "UserName", account.UserName, "PassHash", account.PassHash))
 		return common.RC_PasswordInvalid
 	}
 
@@ -75,28 +76,28 @@ func (srv *LoginService) doRegisterAccount(openID string, token string, ip strin
 
 	ticket64, ret := srv.getUniqueAccountID()
 	if ret != nil {
-		logger.Error("RegisterAccount(%v, %v, %v): service.GetUniqueAccountID() failed with error(%v)",
-			openID, account.PassHash, ip, ret)
+		slog.Error("RegisterAccount service.GetUniqueAccountID() failed",
+			"openID", openID, "PassHash", account.PassHash, "ip", ip, "error", ret)
 		return nil, ret
 	}
-	logger.Debug("ticket64: %v", ticket64)
+	slog.Debug(fmt.Sprintf("ticket64: %v", ticket64))
 	account.ID = ticket64
 	_, err := dao.AddAccount(account)
 	if err != nil {
-		logger.Error("userDao.AddAccount(%v, %v, %v, %v) failed (%v)", openID, account.PassHash, ip, err)
+		slog.Error("userDao.AddAccount failed", "openID", openID, "PassHash", account.PassHash, "ip", ip, "error", err)
 		return nil, common.RC_RegisterFailure
 	}
 	return account, nil
 }
 func (srv *LoginService) registerAccount(openID string, token string, ip string, platform int) (*pb.Account, error) {
-	logger.Info("register username:%s, lastIP:%s ", openID, ip)
+	slog.Info("register", "username", openID, "lastIP", ip)
 	account, err := dao.FindOneByUserNameForUpdate(openID)
 	if err != nil {
-		logger.Error("userDao.FindOneByUserNameForUpdate(\"%s\",\"%s\",\"%s\") failed (%s)", openID, token, ip, err.Error())
+		slog.Error("userDao.FindOneByUserNameForUpdate failed", "openID", openID, "token", token, "ip", ip, "error", err)
 		return nil, common.RC_RegisterFailure
 	}
 	if account != nil {
-		logger.Info("RegisterAccount(%v, %v, %v) failed, username already exists", openID, token, ip)
+		slog.Info("RegisterAccount failed, username already exists", "openID", openID, "token", token, "ip", ip)
 		return nil, common.RC_UserNameExist
 	}
 	account, err = srv.doRegisterAccount(openID, token, ip, platform)
@@ -115,29 +116,29 @@ func (srv *LoginService) loginOrRegister(openID string, token string, ip string,
 	if ret != nil {
 		return nil, ret
 	}
-	logger.Info("loginOrRegister token:%s, channel:%d, lastIP:%s ", openID, channel, ip)
+	slog.Info("loginOrRegister", "openID", openID, "channel", channel, "ip", ip)
 
 	//平台登陆，用openID当作username，因为user表中OpenID字段不唯一，可为空
 	accountDB, err := dao.FindOneByUserNameForUpdate(openID)
 	if err != nil {
-		logger.Error("userDao.FindOneByUserNameForUpdate(\"%s\",\"%s\") failed (%s)", openID, ip, err.Error())
+		slog.Error("userDao.FindOneByUserNameForUpdate failed", "openID", openID, "ip", ip, "error", err)
 		return nil, common.RC_LoginFailure
 	}
 	if accountDB != nil { // 用户已存在
 		//todo: 登录限制检查
-		logger.Info("LoginOrRegister(%v, %v, %v) login, openID exists", openID, ip, channel)
+		slog.Info("LoginOrRegister openID exists", "openID", openID, "channel", channel, "ip", ip)
 		accountDB.UserToken = util.CalculateUserToken(accountDB.PassHash + token)
 		accountDB.LastIP = ip
 
 		err = dao.UpdateAccountLoginInfo(accountDB.ID, accountDB.LastIP, accountDB.UserToken, true)
 		if err != nil {
-			logger.Error("userDao.UpdateAccountLoginInfo(\"%s\",\"%s\",\"%s\") failed (%s)", accountDB.UserName, accountDB.PassHash, accountDB.LastIP, err.Error())
+			slog.Error("userDao.UpdateAccountLoginInfo failed", slog.Group("accountDB", "UserName", accountDB.UserName, "PassHash", accountDB.PassHash, "LastIP", accountDB.LastIP), "error", err)
 			return nil, common.RC_LoginFailure
 		}
 	} else {
 		accountDB, err = srv.doRegisterAccount(openID, token, ip, channel)
 		if err != nil {
-			logger.Error("userDao.AddAccount(%v, %v, %v, %v) failed (%s)", openID, accountDB.PassHash, ip, channel, err.Error())
+			slog.Error("userDao.AddAccount failed", "openID", openID, "PassHash", accountDB.PassHash, "ip", ip, "channel", channel, "error", err)
 			return nil, common.RC_RegisterFailure
 		}
 

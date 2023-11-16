@@ -1,199 +1,144 @@
 package logger
 
 import (
-	"fmt"
+	"context"
+	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
 
-	//"github.com/lestrrat/go-file-rotatelogs"
-	"github.com/lestrrat-go/file-rotatelogs"
-	"github.com/mattn/go-colorable"
-	"github.com/pkg/errors"
-	"github.com/rifflock/lfshook"
-	"github.com/sirupsen/logrus"
+	rotatelogs "github.com/lestrrat-go/file-rotatelogs"
 )
 
 var (
-	defaultLogger   *logrus.Logger
-	captureLineInfo = false
+	defaultHandler = NewLevelHandle(slog.Default().Handler(), slog.LevelInfo)
 )
 
 func init() {
-	defaultLogger = New(logrus.DebugLevel, true)
-	hookError(defaultLogger, os.Args[0]+".error")
+	slog.SetDefault(slog.New(defaultHandler))
+	// hook 错误日志
+	Default().AddHookTextOut(os.Args[0]+".error", slog.LevelError)
 }
-func lineInfo() string {
-	_, file, line, ok := runtime.Caller(3)
-	if ok {
-		idx := 0
-		if idx = strings.LastIndexByte(file, '/'); idx > 0 {
-			idx = strings.LastIndexByte(file[:idx], '/')
+func Default() *LevelHandler {
+	return defaultHandler
+}
+
+type LevelHandler struct {
+	handler slog.Handler
+	level   slog.Level
+	hooks   []slog.Handler
+}
+
+func NewLevelHandle(handler slog.Handler, level slog.Level, hooks ...slog.Handler) *LevelHandler {
+	return &LevelHandler{
+		handler: handler,
+		level:   level,
+		hooks:   hooks,
+	}
+}
+func (h *LevelHandler) Enabled(_ context.Context, Level slog.Level) bool {
+	return Level > h.level
+}
+func (h *LevelHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return NewLevelHandle(h.handler.WithAttrs(attrs), h.level, h.hooks...)
+}
+
+func (h *LevelHandler) WithGroup(name string) slog.Handler {
+	return NewLevelHandle(h.handler.WithGroup(name), h.level, h.hooks...)
+}
+
+func (h *LevelHandler) Handle(ctx context.Context, r slog.Record) error {
+	if value := ctx.Value("slog"); value != nil {
+		if v, ok := value.([]slog.Attr); ok {
+			r.AddAttrs(v...)
 		}
-		if idx > 0 {
-			return fmt.Sprintf("%s:%d", file[idx+1:], line)
-		} else {
-			return fmt.Sprintf("%s:%d", filepath.Base(file), line)
+	}
+	for _, hook := range h.hooks {
+		if hook.Enabled(ctx, r.Level) {
+			hook.Handle(ctx, r)
 		}
 	}
-	return ""
-}
-func defaultEntry() logrus.FieldLogger {
-	if captureLineInfo {
-		return defaultLogger.WithField("line", lineInfo())
-	}
-	return defaultLogger
+	return h.handler.Handle(ctx, r)
 }
 
-func WithField(key string, value interface{}) *logrus.Entry {
-	return defaultEntry().WithField(key, value)
+func (h *LevelHandler) hook(handler slog.Handler) {
+	h.hooks = append(h.hooks, handler)
 }
 
-func WithFields(fields logrus.Fields) *logrus.Entry {
-	return defaultEntry().WithFields(fields)
-}
-
-func WithError(err error) *logrus.Entry {
-	return defaultEntry().WithError(err)
-}
-
-type FireFn func(ent *logrus.Entry) error
-
-func (f FireFn) Levels() []logrus.Level {
-	return []logrus.Level{
-		logrus.PanicLevel,
-		logrus.FatalLevel,
-		logrus.ErrorLevel,
-		logrus.WarnLevel,
-		logrus.InfoLevel,
-		logrus.DebugLevel,
-		logrus.TraceLevel,
-	}
-}
-func (f FireFn) Fire(ent *logrus.Entry) error {
-	return f(ent)
-}
-
-func New(level logrus.Level, captureLine bool) *logrus.Logger {
-	l := logrus.New()
-	captureLineInfo = captureLine
-	l.SetLevel(level)
-	l.SetOutput(colorable.NewColorableStdout())
-	l.SetFormatter(&logrus.TextFormatter{
-		ForceColors:     true,
-		FullTimestamp:   true,
-		TimestampFormat: time.TimeOnly,
-	})
-
-	return l
-}
-
-func hookError(l *logrus.Logger, filename string) {
-	if filename == "" {
+func (h *LevelHandler) AddHookJSONOut(filename string, level slog.Level) {
+	out := newLogOut(filename)
+	if out == nil {
 		return
 	}
-	out, _ := rotatelogs.New(filename)
-	errHook := lfshook.NewHook(lfshook.WriterMap{
-		logrus.ErrorLevel: out,
-		logrus.FatalLevel: out,
-		logrus.PanicLevel: out,
-	}, &logrus.JSONFormatter{
-		TimestampFormat: "01-02 15:04:05",
+	hook := slog.NewJSONHandler(out, &slog.HandlerOptions{
+		Level:     level,
+		AddSource: true,
 	})
-	l.AddHook(errHook)
+
+	h.hook(hook)
 }
 
-func setOutputFile(l *logrus.Logger, filename string) {
-	if filename == "" {
+func (h *LevelHandler) AddHookTextOut(filename string, level slog.Level) {
+	out := newLogOut(filename)
+	if out == nil {
 		return
 	}
-	ext := filepath.Ext(filename)
-	filename = strings.TrimSuffix(filename, ext)
+	hook := slog.NewTextHandler(out, &slog.HandlerOptions{
+		Level:     level,
+		AddSource: true,
+	})
 
-	if !filepath.IsAbs(filename) {
-		filename, _ = filepath.Abs(filename)
+	h.hook(hook)
+}
+
+func newLogOut(filename string) io.Writer {
+	if filename == "" {
+		return nil
 	}
 	dir := filepath.Dir(filename)
 	if _, e := os.Stat(dir); e != nil {
 		if os.IsNotExist(e) {
 			if e := os.MkdirAll(dir, 0777); e != nil {
-				logrus.Fatalf("create log dir failed %v", e)
+				slog.Error("create log dir failed", "error", e.Error())
+				return nil
 			}
 		}
 	}
+
+	ext := filepath.Ext(filename)
+	filename = strings.TrimSuffix(filename, ext)
+	if ext == "" {
+		ext = ".log"
+	}
 	out, err := rotatelogs.New(
 		filename+".%Y%m%d_%H"+ext,
-		withLinkName(filename+ext), // 生成软链，指向最新日志文件
+		rotatelogs.WithLinkName(filename+ext), // 生成软链，指向最新日志文件
+		// withLinkName(filename+ext),            // 生成软链，指向最新日志文件
 		//rotatelogs.WithMaxAge(28*24*time.Hour), // 文件最大保存时间
 		rotatelogs.WithMaxAge(-1),              // 保存文件个数
 		rotatelogs.WithRotationCount(10),       // 保存文件个数
 		rotatelogs.WithRotationTime(time.Hour), // 日志切割时间间隔
 	)
-	logrus.Errorf("config local file system logger error. %+v", errors.WithStack(err))
 
-	l.AddHook(lfshook.NewHook(out, &logrus.TextFormatter{
-		FullTimestamp:   true,
-		TimestampFormat: time.TimeOnly,
-	}))
-}
-
-func SetLogLevel(lv int32) {
-	level, err := logrus.ParseLevel(logrus.Level(lv).String())
-	if err == nil {
-		defaultLogger.SetLevel(level)
+	if err != nil {
+		slog.Error("create log file failed", "error", err.Error(), "filename", filename)
+		return nil
 	}
-}
-func SetOutputFile(filename string) {
-	setOutputFile(defaultLogger, filename)
+	return out
 }
 
-// Debug log debug protocol with cyan color.
-func Debug(v ...interface{}) {
-	defaultEntry().Debug(v...)
-}
-func Debugf(format string, v ...interface{}) {
-	defaultEntry().Debugf(format, v...)
+func SetLogLevel(level slog.Level) {
+	defaultHandler.level = level
 }
 
-// Info log normal protocol.
-func Info(v ...interface{}) {
-	defaultEntry().Info(v...)
-}
-func Infof(format string, v ...interface{}) {
-	defaultEntry().Infof(format, v...)
-}
-
-// Warn log error protocol
-func Warn(v ...interface{}) {
-	defaultEntry().Warn(v...)
-}
-func Warnf(format string, v ...interface{}) {
-	defaultEntry().Warnf(format, v...)
-}
-
-// Error log error protocol with red color.
-func Error(v ...interface{}) {
-	defaultEntry().Error(v...)
-}
-func Errorf(format string, v ...interface{}) {
-	defaultEntry().Errorf(format, v...)
-}
-
-// Fatal log error protocol
-func Fatal(v ...interface{}) {
-	defaultEntry().Fatal(v...)
-}
-
-func Fatalf(format string, v ...interface{}) {
-	defaultEntry().Fatalf(format, v...)
-}
-
-// Panic log error protocol
-func Panic(v ...interface{}) {
-	defaultEntry().Panic(v...)
-}
-func Panicf(format string, v ...interface{}) {
-	defaultEntry().Panicf(format, v...)
+func AddOutputFile(filename string, lv string) {
+	var level slog.Level
+	if err := level.UnmarshalText([]byte(lv)); err == nil {
+		if level < defaultHandler.level {
+			defaultHandler.level = level
+		}
+		defaultHandler.AddHookJSONOut(filename, level)
+	}
 }

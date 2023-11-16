@@ -2,11 +2,10 @@ package service
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	clientV3 "go.etcd.io/etcd/client/v3"
-
-	"github.com/raochq/ant/util/logger"
 )
 
 type ETCDClient struct {
@@ -35,7 +34,7 @@ func NewETCDClient(ctx context.Context, key string, endpoints []string) (*ETCDCl
 }
 
 func (s *ETCDClient) keepAlive(value string) (<-chan *clientV3.LeaseKeepAliveResponse, error) {
-	resp, err := s.client.Grant(context.TODO(), 5)
+	resp, err := s.client.Grant(context.TODO(), 10)
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +50,7 @@ func (s *ETCDClient) keepAlive(value string) (<-chan *clientV3.LeaseKeepAliveRes
 
 func (s *ETCDClient) revoke() {
 	s.client.Revoke(s.ctx, s.leaseId)
-	logger.WithField("key", s.key).Debug("etcd client revoke")
+	slog.Debug("etcd client revoke", "key", s.key)
 }
 
 func (s *ETCDClient) Update(value string) {
@@ -60,9 +59,9 @@ func (s *ETCDClient) Update(value string) {
 	}
 	_, err := s.client.Put(context.TODO(), s.key, value, clientV3.WithLease(s.leaseId))
 	if err != nil {
-		logger.WithError(err).WithField("key", s.key).Error("etcd put failed")
+		slog.Error("etcd put failed", "key", s.key, "value", value, "error", err)
 	}
-	logger.Debug(value)
+	slog.Debug(value)
 }
 
 func (s *ETCDClient) Start(svrInfo string, callback func()) error {
@@ -83,17 +82,16 @@ func (s *ETCDClient) loop(ch <-chan *clientV3.LeaseKeepAliveResponse, callback f
 	for {
 		select {
 		case <-s.ctx.Done():
-			logger.Info(s.ctx.Err())
 			s.revoke()
 			return
 		case ka, ok := <-ch:
 			if !ok {
-				logger.WithField("key", s.key).Info("keep alive channel closed")
+				slog.Info("keep alive channel closed", "key", s.key)
 				s.revoke()
 				return
-			} else {
-				logger.WithField("key", s.key).WithField("ttl", ka.TTL).Debug("Recv reply from service")
 			}
+
+			slog.Debug("Recv reply from service", "key", s.key, "ttl", ka.TTL)
 		}
 	}
 }

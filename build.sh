@@ -21,12 +21,15 @@ proto() {
   
   PROTO_SRC=./protocol/proto
   PROTO_DEST=./protocol/pb
-  GENGO=go_out
-  GENGRPC=go-grpc_out
+  GENGO=--go_out
+  GO_OPT=--go_opt=paths=source_relative
+  GENGRPC=--go-grpc_out
+  RPC_OPT=--go-grpc_opt=paths=source_relative
   echo "gen proto ..."
   test -d ${PROTO_DEST} || mkdir -p ${PROTO_DEST}
-  protoc -I=${PROTO_SRC} --${GENGO}=${PROTO_DEST} ${PROTO_SRC}/*.proto
-  protoc -I=${PROTO_SRC} --${GENGRPC}=${PROTO_DEST} ${PROTO_SRC}/*.proto
+  protoc -I=${PROTO_SRC} ${GENGO}=${PROTO_DEST} ${GO_OPT} ${GENGRPC}=${PROTO_DEST} ${RPC_OPT} ${PROTO_SRC}/*.proto
+  #protoc -I=${PROTO_SRC} ${GENGO}=${PROTO_DEST} ${PROTO_SRC}/*.proto
+  #protoc -I=${PROTO_SRC} ${GENGRPC}=${PROTO_DEST} ${PROTO_SRC}/*.proto
   echo "gen proto ok"
 }
 

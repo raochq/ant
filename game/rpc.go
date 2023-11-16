@@ -3,12 +3,11 @@ package game
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net"
 	"strconv"
 
 	"github.com/raochq/ant/protocol/pb"
-	"github.com/raochq/ant/util/logger"
-
 	"google.golang.org/grpc"
 )
 
@@ -33,13 +32,13 @@ func (g *RPCServer) startGrpc(rpcAddr string) (string, error) {
 	g.svr = grpc.NewServer()
 	pb.RegisterGameServiceServer(g.svr, g)
 	go g.svr.Serve(lis)
-	logger.WithField("rpc", lis.Addr()).Info("=== GameRPCServer started ===")
+	slog.Info("=== GameRPCServer started ===", "rpc", lis.Addr())
 	return addr, nil
 }
 
 func (g *RPCServer) stopGrpc() {
 	g.svr.Stop()
-	logger.Info("=== GameRPCServer stopped ===")
+	slog.Info("=== GameRPCServer stopped ===")
 }
 
 func (g *RPCServer) Echo(ctx context.Context, req *pb.RPCString) (*pb.RPCString, error) {

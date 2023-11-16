@@ -2,10 +2,9 @@ package httpService
 
 import (
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
-
-	"github.com/raochq/ant/util/logger"
 )
 
 func StartHttpService(addr string, zoneID uint32) (*http.Server, error) {
@@ -20,11 +19,11 @@ func StartHttpService(addr string, zoneID uint32) (*http.Server, error) {
 	}
 	go func() {
 		if err := srv.Serve(l); err != nil {
-			logger.Error("http.ListenAndServe(\"%s\") failed (%v)", addr, err)
+			slog.Error("http.ListenAndServe failed", "addr", addr, "error", err)
 		}
 	}()
 	srv.SetKeepAlivesEnabled(true)
-	logger.Info("Start http :%v", l.Addr())
+	slog.Info("Start http service", "addr", l.Addr())
 	return srv, nil
 }
 

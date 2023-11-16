@@ -1,14 +1,13 @@
 package config
 
 import (
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"gopkg.in/yaml.v3"
-
 	"github.com/raochq/ant/protocol/pb"
-	"github.com/raochq/ant/util/logger"
+	"gopkg.in/yaml.v3"
 )
 
 type Game struct {
@@ -39,7 +38,7 @@ func saveDefaultGame(dir string) {
 				Index: 0,
 			},
 			Log: logInfo{
-				Level: 5,
+				Level: "debug",
 				PATH:  "log/" + appName + ".log",
 			},
 			ETCD: []string{
@@ -51,7 +50,7 @@ func saveDefaultGame(dir string) {
 	}
 	appName = filepath.Join(dir, appName+".yml")
 	if data, err := yaml.Marshal(conf); err == nil {
-		logger.Infof("write default game config file=%v", appName)
+		slog.Info("write default game config", "file", appName)
 		os.WriteFile(appName, data, 0777)
 	}
 }

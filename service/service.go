@@ -3,10 +3,9 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"sync"
 	"time"
-
-	"github.com/raochq/ant/util/logger"
 )
 
 // Service 服务基类
@@ -47,7 +46,7 @@ func (s *Service) Init() error {
 	if err := s.IService.Init(); err != nil {
 		return err
 	}
-	logger.WithField("name", s.name).Info("=== Create service ===")
+	slog.Info("=== Create service ===", "name", s.name)
 	s.wg.Add(1)
 	if err := s.etcd.Start(s.Info(), func() { s.wg.Done() }); err != nil {
 		s.wg.Done()
@@ -55,7 +54,7 @@ func (s *Service) Init() error {
 		return err
 	}
 	s.SetState(SSRunning)
-	logger.WithField("name", s.name).Info("=== running service ===")
+	slog.Info("=== running service ===", "name", s.name)
 	go s.loop()
 	return nil
 }
@@ -94,7 +93,7 @@ func (s *Service) loop() {
 	for {
 		select {
 		case <-s.ctx.Done():
-			logger.WithField("name", s.Name()).Info("service loop exit")
+			slog.Info("service loop exit", "name", s.Name())
 			return
 		case <-t.C:
 			s.UpdateInfo()
@@ -105,12 +104,12 @@ func (s *Service) loop() {
 // Close 关闭服务器
 func (s *Service) Close() {
 	s.SetState(SSStopping)
-	logger.Infof("=== stopping service %v ===", s.Name())
+	slog.Info("=== stopping service ===", "name", s.Name())
 	s.IService.Close()
 	s.cancel()
 	s.wg.Wait()
 	s.State = SSStopped
-	logger.Infof("=== stopped service %v ===", s.Name())
+	slog.Info("=== stopped service ===", "name", s.Name())
 }
 
 func (s *Service) SetState(state State) {

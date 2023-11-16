@@ -1,14 +1,13 @@
 package config
 
 import (
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"gopkg.in/yaml.v3"
-
 	"github.com/raochq/ant/protocol/pb"
-	"github.com/raochq/ant/util/logger"
+	"gopkg.in/yaml.v3"
 )
 
 type Login struct {
@@ -39,7 +38,7 @@ func saveDefaultLogin(dir string) {
 				Index: 0,
 			},
 			Log: logInfo{
-				Level: 5,
+				Level: "debug",
 				PATH:  "log/" + appName + ".log",
 			},
 			ETCD: []string{
@@ -52,7 +51,7 @@ func saveDefaultLogin(dir string) {
 
 	appName = filepath.Join(dir, appName+".yml")
 	if data, err := yaml.Marshal(conf); err == nil {
-		logger.Infof("write default login config, file=%v", appName)
+		slog.Info("write default login config", "file", appName)
 		os.WriteFile(appName, data, 0777)
 	}
 }

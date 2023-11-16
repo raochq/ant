@@ -1,10 +1,11 @@
 package gate
 
 import (
+	"log/slog"
+
 	"github.com/raochq/ant/config"
 	"github.com/raochq/ant/protocol/pb"
 	"github.com/raochq/ant/service"
-	"github.com/raochq/ant/util/logger"
 )
 
 type Gate struct {
@@ -26,15 +27,15 @@ func (g *Gate) Stop() {
 }
 
 func (g *Gate) Init() error {
-	logger.Info("Gate init...\n")
+	slog.Info("Gate init...")
 	return nil
 }
 func (g *Gate) Close() {
-	logger.Info("Gate destroy...\n")
+	slog.Info("Gate destroy...")
 }
 
 func (g *Gate) MainLoop(sig <-chan byte) {
-	logger.Info("Gate Run in Loop\n")
+	slog.Info("Gate Run in Loop")
 }
 
 func New(name string, info pb.ServiceInfo) *Gate {

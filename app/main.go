@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -16,7 +17,6 @@ import (
 	_ "github.com/raochq/ant/gate"
 	_ "github.com/raochq/ant/login"
 	"github.com/raochq/ant/service"
-	"github.com/raochq/ant/util/logger"
 )
 
 var (
@@ -59,11 +59,12 @@ func init() {
 		list = allConfig()
 	}
 
-	logger.Infof("conf=%s\n", confFile)
+	slog.Info("read config", "file", confFile)
 	for _, c := range list {
 		conf, err := config.Load(c)
 		if err != nil {
-			logger.Fatalf("load config %v failed %v", confFile, err)
+			slog.Error("load config failed", "file", confFile, "error", err)
+			panic(err)
 		}
 		confs = append(confs, conf)
 	}
@@ -88,23 +89,25 @@ func allConfig() []string {
 }
 
 func main() {
-	logger.Info(Version())
+	slog.Info(Version())
 	if err := service.StartService(confs); err != nil {
-		logger.Fatal("register service failed %v", err)
+		slog.Error("register service failed")
+		os.Exit(1)
 	}
 	//使用gops性能监控
 	if err := agent.Listen(agent.Options{}); err != nil {
-		logger.Fatal("gops listen fail %v", err)
+		slog.Error("gops listen fail", "error", err)
+		os.Exit(1)
 	}
 	defer agent.Close()
 
 	ch := make(chan os.Signal)
 	signal.Notify(ch, syscall.SIGKILL, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGABRT, syscall.SIGTERM)
 	sig := <-ch
-	logger.WithField("sig", fmt.Sprintf("%v(%d)", sig, int(sig.(syscall.Signal)))).Info("capture signal, exit service")
+	slog.Info("capture signal, exit service", "sig", fmt.Sprintf("%v(%d)", sig, int(sig.(syscall.Signal))))
 
 	service.CloseAll()
-	logger.Info("=== close All service ===")
+	slog.Info("=== close All service ===")
 }
 
 func usage() {

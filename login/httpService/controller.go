@@ -3,7 +3,8 @@ package httpService
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -12,43 +13,42 @@ import (
 
 	"github.com/raochq/ant/common"
 	"github.com/raochq/ant/protocol/pb"
-	"github.com/raochq/ant/util/logger"
 )
 
 // POST 返回统一json
 func retPWriter(r *http.Request, wr http.ResponseWriter, params *string, start time.Time, result map[string]interface{}) {
 	byteJson, err := json.Marshal(result)
 	if err != nil {
-		logger.Error("json.Marshal(\"%v\") failed (%s)", result, err.Error())
+		slog.Error("json.Marshal failed", "data", result, "error", err)
 	}
 	timeInServerEnd := time.Now()
 	if _, err = wr.Write(byteJson); err != nil {
-		logger.Error("wr.Write(\"%s\") failed (%s)", string(byteJson), err.Error())
+		slog.Error("wr.Write failed", "data", string(byteJson), "error", err)
 	}
 
 	// Log
 	if ret, ok := result["ret"]; ok {
-		logger.Info("[%s]get_url:%s(param:%s,time:%f,ptime:%f,ret:%d)", r.RemoteAddr, r.URL.String(), *params, time.Now().Sub(start).Seconds(), timeInServerEnd.Sub(start).Seconds(), ret)
+		slog.Info("retPWriter ok", "addr", r.RemoteAddr, "url", r.URL.String(),
+			"param", *params, "time", time.Now().Sub(start).Seconds(), "ptime", timeInServerEnd.Sub(start).Seconds(), "ret", ret)
 	}
 }
 func getIP(r *http.Request) string {
-	logger.Debug("r %v", r)
+	slog.Debug("getIP", "Request", r)
 	remoteAddr := r.Header.Get("X-Forwarded-For")
 	remoteIP := strings.Split(remoteAddr, ",")
 
-	logger.Debug("remoteIP %v", remoteIP)
+	slog.Debug("remoteIP", "ip", remoteIP)
 	ip := ""
-	logger.Debug("len(remoteIP) : %v", len(remoteIP))
 	ip = remoteIP[0]
 	if ip != "" {
 		return ip
 	}
 	ips := r.RemoteAddr
-	logger.Debug("r.RemoteAddr %v", ips)
+	slog.Debug("getIP RemoteAddr", "r.RemoteAddr", ips)
 	rip := strings.Split(ips, ":")
 	if len(rip) != 0 {
 		ip = rip[0]
-		logger.Debug("ip %v", ip)
+		slog.Debug("getIP", "ip", ip)
 		return ip
 	}
 	return ""
@@ -61,7 +61,7 @@ func (srv *LoginService) NullRequest(http.ResponseWriter, *http.Request) {
 // 用户登录http， 必须是post请求
 func (srv *LoginService) UserLogin(wr http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
-		logger.Error("Method Not Allowed %v", r.Method)
+		slog.Error("Method Not Allowed", "Method", r.Method)
 		http.Error(wr, "Method Not Allowed", 405)
 		return
 	}
@@ -71,16 +71,16 @@ func (srv *LoginService) UserLogin(wr http.ResponseWriter, r *http.Request) {
 
 	//todo: 服务状态检查。
 
-	body, err := ioutil.ReadAll(r.Body)
+	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		logger.Warn("ioutil.ReadAll() failed (%s)", err.Error())
+		slog.Warn("io.ReadAll failed", "error", err.Error())
 		res["ret"] = common.RC_ParameterInvalid
 		return
 	}
 	pStr = string(body)
 	params, err := url.ParseQuery(pStr)
 	if err != nil {
-		logger.Error("url.ParseQuery(\"%s\") failed (%s)", string(body), err.Error())
+		slog.Error("url.ParseQuery failed", "query", string(body), "error", err.Error())
 		res["ret"] = common.RC_ParameterInvalid
 		return
 	}
@@ -88,35 +88,35 @@ func (srv *LoginService) UserLogin(wr http.ResponseWriter, r *http.Request) {
 	platType := params.Get("client")
 	bpt, err := strconv.Atoi(platType)
 	if err != nil {
-		logger.Info("strconv.Atoi(\"%s\") failed (%s)", platType, err.Error())
+		slog.Info("strconv.Atoi failed", "str", platType, "error", err.Error())
 		res["ret"] = common.RC_ParameterInvalid
 		return
 	}
 	account.Platform = uint32(bpt)
 	account.UserName = params.Get("user_name")
 	if account.UserName == "" {
-		logger.Info("user name is empty")
+		slog.Info("user name is empty")
 		res["ret"] = common.RC_ParameterInvalid
 		return
 	}
 	account.PassHash = params.Get("pass_hash")
 	if account.PassHash == "" {
-		logger.Info("password hash is empty")
+		slog.Info("password hash is empty")
 		res["ret"] = common.RC_ParameterInvalid
 		return
 	}
 
 	account.LastIP = getIP(r)
 
-	logger.Debug("UserLogin account %s", account.UserName)
+	slog.Debug("UserLogin account %s", account.UserName)
 	ret := srv.userLogin(account)
 	if ret != nil {
-		logger.Info("UserLogin account get user from db fail %d", ret)
+		slog.Info("UserLogin account get user from db fail", "ret", ret)
 		res["ret"] = ret
 		return
 	}
 
-	logger.Debug("UserLogin account get account %s data from db success", account.UserName)
+	slog.Debug("UserLogin account get account data from db success", "UserName", account.UserName)
 	res["data"] = map[string]string{
 		"account_id": fmt.Sprint(account.ID),
 		"user_token": account.UserToken,
@@ -125,7 +125,7 @@ func (srv *LoginService) UserLogin(wr http.ResponseWriter, r *http.Request) {
 }
 func (srv *LoginService) UserRegister(wr http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
-		logger.Error("Method Not Allowed %v", r.Method)
+		slog.Error("Method Not Allowed", "method", r.Method)
 		http.Error(wr, "Method Not Allowed", 405)
 		return
 	}
@@ -135,28 +135,28 @@ func (srv *LoginService) UserRegister(wr http.ResponseWriter, r *http.Request) {
 
 	//todo: 服务状态检查。
 
-	body, err := ioutil.ReadAll(r.Body)
+	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		logger.Warn("ioutil.ReadAll() failed (%s)", err.Error())
+		slog.Warn("io.ReadAll failed", "error", err.Error())
 		res["ret"] = common.RC_ParameterInvalid
 		return
 	}
 	pStr = string(body)
 	params, err := url.ParseQuery(pStr)
 	if err != nil {
-		logger.Error("url.ParseQuery(\"%s\") failed (%s)", string(body), err.Error())
+		slog.Error("url.ParseQuery failed", "query", string(body), "error", err.Error())
 		res["ret"] = common.RC_ParameterInvalid
 		return
 	}
 	userName := params.Get("user_name")
 	if userName == "" {
-		logger.Info("user name is empty")
+		slog.Info("user name is empty")
 		res["ret"] = common.RC_ParameterInvalid
 		return
 	}
 	passWord := params.Get("user_pass")
 	if passWord == "" {
-		logger.Info("password is empty")
+		slog.Info("password is empty")
 		res["ret"] = common.RC_ParameterInvalid
 		return
 	}
@@ -175,7 +175,7 @@ func (srv *LoginService) UserRegister(wr http.ResponseWriter, r *http.Request) {
 // 用户登录或注册并登录
 func (srv *LoginService) UserLoginOrRegister(wr http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
-		logger.Error("Method Not Allowed %v", r.Method)
+		slog.Error("Method Not Allowed", "method", r.Method)
 		http.Error(wr, "Method Not Allowed", 405)
 		return
 	}
@@ -185,42 +185,42 @@ func (srv *LoginService) UserLoginOrRegister(wr http.ResponseWriter, r *http.Req
 
 	//todo: 服务状态检查限制。
 
-	body, err := ioutil.ReadAll(r.Body)
+	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		logger.Warn("ioutil.ReadAll() failed (%s)", err.Error())
+		slog.Warn("io.ReadAll failed", "error", err.Error())
 		res["ret"] = common.RC_ParameterInvalid
 		return
 	}
 	pStr = string(body)
 	params, err := url.ParseQuery(pStr)
 	if err != nil {
-		logger.Error("url.ParseQuery(\"%s\") failed (%s)", string(body), err.Error())
+		slog.Error("url.ParseQuery failed", "query", string(body), "error", err.Error())
 		res["ret"] = common.RC_ParameterInvalid
 		return
 	}
 	userName := params.Get("user_name")
 	if userName == "" {
-		logger.Info("user name is empty")
+		slog.Info("user name is empty")
 		res["ret"] = common.RC_ParameterInvalid
 		return
 	}
 	passWord := params.Get("user_pass")
 	if passWord == "" {
-		logger.Info("password is empty")
+		slog.Info("password is empty")
 		res["ret"] = common.RC_ParameterInvalid
 		return
 	}
 
 	openID := params.Get("openID")
 	if openID == "" {
-		logger.Error("openID is empty")
+		slog.Error("openID is empty")
 		res["ret"] = common.RC_ParameterInvalid
 		return
 	}
 
 	token := params.Get("token")
 	if token == "" {
-		logger.Error("token is empty")
+		slog.Error("token is empty")
 		res["ret"] = common.RC_ParameterInvalid
 		return
 	}

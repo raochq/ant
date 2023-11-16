@@ -4,11 +4,10 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	_ "github.com/go-sql-driver/mysql"
-
 	"github.com/raochq/ant/protocol/pb"
-	"github.com/raochq/ant/util/logger"
 )
 
 const (
@@ -25,7 +24,7 @@ var (
 func InitMysql(dbAddr string, maxConn int32) error {
 	var err error
 	if gDBDao, err = sql.Open("mysql", dbAddr); err != nil {
-		logger.Error("sql.Open(\"mysql\", %s) failed (%v)", dbAddr, err)
+		slog.Error("sql.Open failed", "addr", dbAddr, "error", err)
 		return err
 	}
 	gDBDao.SetMaxIdleConns(0)
@@ -42,7 +41,7 @@ func FindOneByUserNameForUpdate(userName string) (*pb.Account, error) {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		} else {
-			logger.Error("row.Scan() failed (%s)", err.Error())
+			slog.Error("row.Scan() failed", "error", err)
 			return nil, err
 		}
 
@@ -55,7 +54,7 @@ func FindOneByUserNameForUpdate(userName string) (*pb.Account, error) {
 func UpdateAccountLoginInfo(accountID int64, lastIP string, userToken string, isLoggedIn bool) error {
 	_, err := gDBDao.Exec(UpdateAccountLoginStatusSQL, userToken, isLoggedIn, lastIP, accountID)
 	if err != nil {
-		logger.Error("db.Exec() failed (%s)", err.Error())
+		slog.Error("db.Exec() failed", "error", err)
 		return err
 	}
 
@@ -67,15 +66,15 @@ func AddAccount(account *pb.Account) (int64, error) {
 	res, err := gDBDao.Exec(InsertAccountSQL, account.ID, account.UserName, account.PassHash, account.UserToken, account.LastIP,
 		account.Platform, account.CTime, account.MTime, account.ChatNeteaseToken, account.IsLoggedIn)
 	if err != nil {
-		logger.Error("db.Exec() failed (%s)", err.Error())
+		slog.Error("db.Exec() failed", "error", err.Error())
 		return 0, err
 	}
 	row, err := res.RowsAffected()
 	if err != nil {
-		logger.Error("res.RowsAffected() failed (%s)", err.Error())
+		slog.Error("res.RowsAffected() failed", "error", err.Error())
 		return 0, err
 	} else if row != 1 {
-		logger.Error("res.RowsAffected() got %v rows", row)
+		slog.Error("res.RowsAffected() row != 1", "rows", row)
 		return 0, errors.New(fmt.Sprintf("AddAccount(%v, %v) hasn't insert succeessfully", account, account.ID))
 	}
 

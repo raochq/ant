@@ -1,12 +1,14 @@
 package utils
 
 import (
+	"errors"
+	"fmt"
+	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime/debug"
 	"strings"
-
-	"github.com/raochq/ant/util/logger"
 )
 
 // 获取程序名称
@@ -33,10 +35,7 @@ func GetAppPath() string {
 func Exists(path string) bool {
 	_, err := os.Stat(path) //os.Stat获取文件信息
 	if err != nil {
-		if os.IsExist(err) {
-			return true
-		}
-		return false
+		return errors.Is(err, fs.ErrExist)
 	}
 	return true
 }
@@ -45,7 +44,7 @@ func Exists(path string) bool {
 func PrintPanicStack() {
 	if err := recover(); err != nil {
 		buf := debug.Stack()
-		logger.Error("panic: %v\n%s", err, buf)
+		slog.Error(fmt.Sprintf("panic:%s", buf), "error", err)
 	}
 }
 

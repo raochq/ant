@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync"
 
 	"github.com/raochq/ant/config"
@@ -58,7 +59,7 @@ func (m *Manger) newServiceImpl(conf config.Config) (*Service, error) {
 
 	if _, ok := m.list[svr.Name()]; ok {
 		err := fmt.Errorf("service %s is already registered", svr.Name())
-		logger.Error("Create Service failed", err)
+		slog.Error("Create Service failed", "error", err)
 		return nil, err
 	}
 	m.list[svr.Name()] = svr
@@ -77,7 +78,7 @@ func (m *Manger) newServiceImpl(conf config.Config) (*Service, error) {
 func (m *Manger) createService(conf config.Config) (*Service, error) {
 	if conf == nil || conf.GetBase() == nil {
 		err := errors.New("invalid config for create service")
-		logger.WithError(err).Error("Create Service failed")
+		slog.Error("Create Service failed", "error", err)
 		return nil, err
 	}
 	m.Lock()
@@ -89,7 +90,7 @@ func (m *Manger) createService(conf config.Config) (*Service, error) {
 	}
 
 	if err := svr.Init(); err != nil {
-		logger.WithError(err).WithField("name", svr.Name()).Error("service init failed")
+		slog.Error("service init failed", "name", svr.Name(), "error", err)
 		delete(m.list, svr.Name())
 		return nil, err
 	}
@@ -122,8 +123,7 @@ func StartService(confs []config.Config) error {
 		return errors.New("no config for service")
 	}
 	logConf := confs[0].GetBase().Log
-	logger.SetOutputFile(logConf.PATH)
-	logger.SetLogLevel(logConf.Level)
+	logger.AddOutputFile(logConf.PATH, logConf.Level)
 
 	for _, conf := range confs {
 		_, err := Manager().createService(conf)
