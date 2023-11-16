@@ -1,7 +1,6 @@
+.DS_Store
 /.idea/
 /.vscode/
 /protocol/pb/
 /log/
 /bin/
-/go.sum
-.DS_Store
