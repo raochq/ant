@@ -113,7 +113,7 @@ func newLogOut(filename string) io.Writer {
 		ext = ".log"
 	}
 	out, err := rotatelogs.New(
-		filename+".%Y%m%d_%H"+ext,
+		filename+".%y%m%d_%H"+ext,
 		rotatelogs.WithLinkName(filename+ext), // 生成软链，指向最新日志文件
 		// withLinkName(filename+ext),            // 生成软链，指向最新日志文件
 		//rotatelogs.WithMaxAge(28*24*time.Hour), // 文件最大保存时间
