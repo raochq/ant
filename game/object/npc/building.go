@@ -12,21 +12,23 @@ type Building struct {
 	zones map[int64]base.Point
 }
 
-func NewBuilding(id int64, name string) (*base.Object, error) {
-	impl := &Building{
+func NewBuilding(id int64, name string) (*Building, error) {
+	b := &Building{
 		NPC: NPC{
 			Name: name,
 		},
 	}
-	return base.NewObject(impl, id)
+	b.Init(b, id)
+	return b, nil
 }
 
 func (b *Building) ObjectType() base.ObjectType {
 	return base.OBJ_Builidng
 }
 
-func (b *Building) Init(super *base.BaseObject) error {
-	b.NPC.Init(super)
+func (b *Building) Init(impl base.Objecter, id int64) error {
+	slog.Debug("\033[1;31;40mBuilding\033[0m Init")
+	b.NPC.Init(impl, id)
 	b.zones = make(map[int64]base.Point)
 	return nil
 }

@@ -19,9 +19,9 @@ func TestRun(t *testing.T) {
 	p, _ := player.NewPlayer(1, "hello", 10, true)
 	n, _ := npc.NewNPC(2, "npc1", 5)
 	b, _ := npc.NewBuilding(3, "building1")
-	m.AddObject(p)
-	m.AddObject(n)
-	m.AddObject(b)
+	m.AddObject(p.Object())
+	m.AddObject(n.Object())
+	m.AddObject(b.Object())
 	m.Tick(time.Now())
 	for i := 0; i < 10; i++ {
 		m.Tick(time.Now())

@@ -9,7 +9,7 @@ import (
 )
 
 type Player struct {
-	*base.BaseObject
+	base.BaseObject
 	Name string
 	Age  int
 	Sex  bool
@@ -17,25 +17,27 @@ type Player struct {
 
 var _ base.Objecter = (*Player)(nil)
 
-func NewPlayer(id int64, name string, age int, sex bool) (*base.Object, error) {
+func NewPlayer(id int64, name string, age int, sex bool) (*Player, error) {
 	p := &Player{
 		Name: name,
 		Age:  age,
 		Sex:  sex,
 	}
-	return base.NewObject(p, id)
+	p.Init(p, id)
+	return p, nil
 }
 
 func (p *Player) ObjectType() base.ObjectType {
 	return base.OBJ_PLAYER
 }
 
-func (p *Player) Init(super *base.BaseObject) error {
-	p.BaseObject = super
+func (p *Player) Init(impl base.Objecter, id int64) error {
+	p.BaseObject.Init(impl, id)
 	p.RegisterEvent(base.Event_Add, p.OnAddToMap)
 	p.RegisterEvent(base.Event_AfterMove, p.AfterMove)
 	return nil
 }
+
 func (p *Player) OnAddToMap(target *base.Object, data any) {
 	slog.Info("\033[0;34mPlayer\033[0m event added to map", "map id", p.UUID(), "target ID", target.UUID())
 }
@@ -60,8 +62,8 @@ func (p *Player) CheckMove(pt base.Point) bool {
 }
 
 func (p *Player) MoveTo(pt base.Point) {
-	if m := p.OwnMap(); m != nil && m.MoveObject(p.Impl(), pt) {
-		p.FireEvent(base.Event_AfterMove, p.Impl(), nil)
+	if m := p.OwnMap(); m != nil && m.MoveObject(p.Object(), pt) {
+		p.FireEvent(base.Event_AfterMove, p.Object(), nil)
 	}
 }
 

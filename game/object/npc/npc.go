@@ -9,24 +9,25 @@ import (
 )
 
 type NPC struct {
-	*base.BaseObject
+	base.BaseObject
 	Name string
 	Age  int
 }
 
 var _ base.Objecter = (*NPC)(nil)
 
-func NewNPC(id int64, name string, age int) (*base.Object, error) {
+func NewNPC(id int64, name string, age int) (*NPC, error) {
 	npc := &NPC{
 		Name: name,
 		Age:  age,
 	}
-	return base.NewObject(npc, id)
+	npc.Init(npc, id)
+	return npc, nil
 }
 
-func (p *NPC) Init(super *base.BaseObject) error {
-	slog.Debug("\033[1;31;40mNPC\033[0m Born")
-	p.BaseObject = super
+func (p *NPC) Init(impl base.Objecter, id int64) error {
+	slog.Debug("\033[1;31;40mNPC\033[0m Init")
+	p.BaseObject.Init(impl, id)
 	return nil
 }
 

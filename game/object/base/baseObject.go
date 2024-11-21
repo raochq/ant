@@ -1,7 +1,6 @@
 package base
 
 import (
-	"errors"
 	"log/slog"
 	"time"
 )
@@ -27,7 +26,7 @@ const (
 type EventHandler func(*Object, any)
 
 type Objecter interface {
-	Init(*BaseObject) error // 虚函数，子类可以重写，实现自己的逻辑
+	Object() *Object
 	CheckMove(Point) bool   // 虚函数，子类可以重写，实现自己的逻辑
 	Tick(time.Time)         // 虚函数，子类可以重写，实现自己的逻辑
 	ObjectType() ObjectType // 纯虚函数，子类必须实现
@@ -50,11 +49,15 @@ func (o *BaseObject) UUID() int64 {
 	return o.uuid
 }
 
-func (o *BaseObject) Impl() *Object {
+func (o *BaseObject) Object() *Object {
 	return o.impl
 }
-func (o *BaseObject) init(impl *Object, id int64) {
-	o.impl = impl
+
+func (o *BaseObject) Init(impl Objecter, id int64) {
+	o.impl = &Object{
+		Objecter:   impl,
+		BaseObject: o,
+	}
 	o.uuid = id
 	o.events = make(map[EventType][]EventHandler)
 }
@@ -106,28 +109,7 @@ func (o *BaseObject) Print() {
 // 纯虚函数，可以不做重定向。
 type Object struct {
 	Objecter
-	BaseObject
-}
-
-func NewObject(impl Objecter, id int64) (*Object, error) {
-	if impl == nil {
-		return nil, errors.New("impl is nil")
-	}
-
-	if _, ok := impl.(*Object); ok {
-		// Object不能作为impl,否则会造成死循环
-		return nil, errors.New("impl is Object")
-	}
-
-	obj := &Object{
-		Objecter: impl,
-	}
-	obj.init(obj, id)
-
-	if err := obj.Init(&obj.BaseObject); err != nil {
-		return nil, err
-	}
-	return obj, nil
+	*BaseObject
 }
 
 func (o *Object) Tick(t time.Time) {
